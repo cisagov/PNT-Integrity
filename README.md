@@ -1,7 +1,7 @@
-# PNT-Integrity-Library
+# PNT Integrity Library
 The PNT Integrity Library provides users a method to verify the integrity of the received GPS data and ranging signals, thereby improving resiliency against potential GPS signal loss.
 
-<Body>  <b> <font size="5">  Build Instructions for the PNT Integrity Library </font size="5"> </b> </Body>  
+## Build Instructions for the PNT Integrity Library
 
 This repository contains the top level CMake project for buidling the IS4S PNT Integrity Library, User Interface and their dependencies.
 
@@ -28,45 +28,68 @@ operating systems are provided in the following sections.
 <b>Ubuntu / Debian</b>
 
 Install Eigen by running:
+```
 sudo apt install libeigen3-dev
+```
 Optionally install FFTW by running:
+```
 sudo apt install libfftw3-dev
+```
 Install Qt5 on Ubuntu by running:
+```
 sudo apt install qtdeclarative5-dev qtwebengine5-dev libqt5charts5-dev
+```
 
 <b>MacOS </b>
 
 Install Eigen by running:
+```
 brew install eigen
+```
 Optionally install FFTW by running:
+```
 brew install fftw
+```
 Install Qt5 on MacOS by running:
+```
 brew install qt
+```
 If you encounter CMake build errors when finding QT this may help:
+```
 export CMAKE_PREFIX_PATH=/usr/local/Cellar/qt/[version]/
+```
 
 <b>Windows</b>
 
 Install Eigen by running:
+```
 choco install eigen
+```
 Chocolatey does not support provide binaries for FFTW. They can be downloaded and installed
 directly from the project website: http://www.fftw.org/install/windows.html
 (http://www.fftw.org/install/windows.html)
-For instructions on installing Qt on Windows platform click here (https://doc.qt.io/qt-
-5/windows.html).
+For instructions on installing Qt on Windows platform [click here](https://doc.qt.io/qt-5/windows.html).
 
 <b>Building</b>
 
 Extract the release archive:
+```
 unzip release.zip
+```
 Generate build files using cmake
+```
 cd release
 mkdir build
 cmake ../
+```
 By default, this will generate Unix Makefiles for the package. Project files can be generated for
 other build systems or IDEs by selecting an alternative CMake generator
 (https://cmake.org/cmake/help/v3.15/manual/cmake-generators.7.html).
 Build the libraries by running:
+```
 make
+```
 The libraries can be optionally installed to the user's system by running:
+```
 make install
+```

@@ -2,16 +2,22 @@
 The PNT Integrity Library provides users a method to verify the integrity of the received GPS data and ranging signals, thereby improving resiliency against potential GPS signal loss. The software is a scalable framework for GNSS-based PNT manipulation detection that offers varying levels of protection based on the available data. The library is to be provided to GNSS receiver and GNSS-based timing server OEMs for use in future development or integration into existing products and platforms. More information can be found under [PNT_Integrity_Library_Guide.pdf](https://github.com/cisagov/PNT-Integrity/blob/develop/PNT_Integrity_Library_Guide.pdf)
 
 ## License
+GNU GENERAL PUBLIC LICENSE (GPL), Version 3, 29 June 2007
+
+Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>. Everyone is permitted to copy and distribute verbatim copies of this license document, but changing it is not allowed.
+                       
+To protect your rights, we need to prevent others from denying you these rights or asking you to surrender the rights.  Therefore, you have certain responsibilities if you distribute copies of the software, or if  you modify it: responsibilities to respect the freedom of others. For example, if you distribute copies of such a program, whether gratis or for a fee, you must pass on to the recipients the same freedoms that you received.  You must make sure that they, too, receive or can get the source code.  And you must show them these terms so they know their rights. See [GPL License](https://github.com/cisagov/PNT-Integrity/blob/develop/LICENSE) for more information.
+
 This library is licensed under the BSD 3-Clause License. The library contains source code developed by IS4S and third parties. Refer to the invidiual source files for applicable copyright information.
 ```
 Copyright (c) 2020 Integrated Solutions for Systems (IS4S), Inc
 Copyright (c) 2017, ETHZ ASL (geodetic converter)
-Copyright (c) 2009, Ben Hoyt (inih)*
+Copyright (c) 2009, Ben Hoyt (inih)
 ```
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-3. Neither the name of IS4S, Ben Hoyt or ETHZ ASL nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+3. Neither the name of IS4S, Ben Hoyt, ETHZ ASL, nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 

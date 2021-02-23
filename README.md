@@ -2,12 +2,6 @@
 The PNT Integrity Library provides users a method to verify the integrity of the received GPS data and ranging signals, thereby improving resiliency against potential GPS signal loss. The software is a scalable framework for GNSS-based PNT manipulation detection that offers varying levels of protection based on the available data. The library is to be provided to GNSS receiver and GNSS-based timing server OEMs for use in future development or integration into existing products and platforms. More information can be found under [PNT_Integrity_Library_Guide.pdf](https://github.com/cisagov/PNT-Integrity/blob/develop/PNT_Integrity_Library_Guide.pdf).
 
 ## License
-GNU GENERAL PUBLIC LICENSE (GPL), Version 3, 29 June 2007
-
-Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>. Everyone is permitted to copy and distribute verbatim copies of this license document, but changing it is not allowed.
-                       
-To protect your rights, we need to prevent others from denying you these rights or asking you to surrender the rights.  Therefore, you have certain responsibilities if you distribute copies of the software, or if  you modify it: responsibilities to respect the freedom of others. For example, if you distribute copies of such a program, whether gratis or for a fee, you must pass on to the recipients the same freedoms that you received.  You must make sure that they, too, receive or can get the source code.  And you must show them these terms so they know their rights. See [GPL License](https://github.com/cisagov/PNT-Integrity/blob/develop/LICENSE) for more information.
-
 This library is licensed under the BSD 3-Clause License. The library contains source code developed by IS4S and third parties. Refer to the invidiual source files for applicable copyright information.
 ```
 Copyright (c) 2020 Integrated Solutions for Systems (IS4S), Inc

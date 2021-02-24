@@ -21,7 +21,7 @@ This repository contains the top level CMake project for building the IS4S PNT I
 
 <b> System Requirements </b>
 
-The PNT Integrity Library is written in a cross-platform manner using C++. While it is expected to work on a wide variety of platforms it has been tested with on the following operating systems:
+The PNT Integrity Library is written in a cross-platform manner using C++. While it is expected to work on a wide variety of platforms, it has been tested with on the following operating systems:
 * Ubuntu Linux 16.04, 18.04 & 20.04
 * MacOS 10.15
 * Windows 10

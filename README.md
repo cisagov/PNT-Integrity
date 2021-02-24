@@ -2,7 +2,7 @@
 The PNT Integrity Library provides users a method to verify the integrity of the received GPS data and ranging signals, thereby improving resiliency against potential GPS signal loss. The software is a scalable framework for GNSS-based PNT manipulation detection that offers varying levels of protection based on the available data. The library is to be provided to GNSS receiver and GNSS-based timing server OEMs for use in future development or integration into existing products and platforms. More information can be found under [PNT_Integrity_Library_Guide.pdf](https://github.com/cisagov/PNT-Integrity/blob/develop/PNT_Integrity_Library_Guide.pdf).
 
 ## License
-This library is licensed under the BSD 3-Clause License. The library contains source code developed by IS4S and third parties. Refer to the invidiual source files for applicable copyright information.
+This library is licensed under the BSD 3-Clause License. The library contains source code developed by IS4S and third parties. Refer to the invidual source files for applicable copyright information.
 ```
 Copyright (c) 2020 Integrated Solutions for Systems (IS4S), Inc
 Copyright (c) 2017, ETHZ ASL (geodetic converter)
@@ -17,7 +17,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 ## Build Instructions for the PNT Integrity Library
 
-This repository contains the top level CMake project for buidling the IS4S PNT Integrity Library, User Interface and their dependencies.
+This repository contains the top level CMake project for building the IS4S PNT Integrity Library, User Interface, and their dependencies.
 
 <b> System Requirements </b>
 
@@ -34,7 +34,7 @@ The following additional tools are needed to build the library:
 
 The PNT Integrity Library is designed to require as few third party dependencies as possible to support building on a wide variety of platforms. Two dependencies are required in addition to the libraries provided in the package. The Eigen (https://eigen.tuxfamily.org) C++ template library for linear algebra is required by the base PNT Integrity library. The FFTW (http://fftw.org) package is optionally required and is needed to use the acquisition check. QT (https://www.qt.io) is required to build and run the user interface
 
-Both packages can be installed following instructions on their respective websites. Eigen is a header-only package and can be installed by downloading a release from the project web site and extracting to a local folder. FFTW binaries are avaiable for a range of platforms from the project web site.
+Both packages can be installed following instructions on their respective websites. Eigen is a header-only package and can be installed by downloading a release from the project web site and extracting to a local folder. FFTW binaries are available for a range of platforms from the project web site.
 
 Alternatively, a package manager can be used to install the dependencies. For MacOS the Homebrew (https://brew.sh) package manager is recommended. The Chocolatey (https://chocolatey.org) package manager is recommended for Windows. Instructions on installing the required and optional dependencies using package managers on the supported
 operating systems are provided in the following sections.

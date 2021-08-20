@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.6)
 project(pnt_integrity)
 
 set (PNT_INTEGRITY_MAJOR_VERSION 1)
-set (PNT_INTEGRITY_MINOR_VERSION 12)
-set (PNT_INTEGRITY_PATCH_VERSION 0)
+set (PNT_INTEGRITY_MINOR_VERSION 16)
+set (PNT_INTEGRITY_PATCH_VERSION 1)
 
 set (PROJECT_VERSION ${PNT_INTEGRITY_MAJOR_VERSION}.${PNT_INTEGRITY_MINOR_VERSION}.${PNT_INTEGRITY_PATCH_VERSION})
 message (STATUS "${PROJECT_NAME} version ${PROJECT_VERSION}")
@@ -51,11 +51,15 @@ set(PNT_INTEGRITY_SRCS src/AssuranceCheck.cpp
                        src/AngleOfArrivalCheck.cpp
                        src/RangePositionCheck.cpp
                        src/StaticPositionCheck.cpp
+                       src/NavigationDataCheck.cpp
                        src/PositionVelocityConsistencyCheck.cpp
                        src/CnoCheck.cpp
                        src/PositionJumpCheck.cpp
                        src/AgcCheck.cpp
-                       src/ClockBiasCheck.cpp)
+                       src/ClockBiasCheck.cpp
+                       src/GPSNavDataCommon.cpp
+                       src/GPSAlmanac.cpp
+                       src/GPSEphemeris.cpp)
 # Add default header files
 set(PNT_INTEGRITY_HEADERS  include/pnt_integrity/AssuranceCheck.hpp
                            include/pnt_integrity/IntegrityData.hpp
@@ -65,10 +69,14 @@ set(PNT_INTEGRITY_HEADERS  include/pnt_integrity/AssuranceCheck.hpp
                            include/pnt_integrity/AngleOfArrivalCheck.hpp
                            include/pnt_integrity/RangePositionCheck.hpp
                            include/pnt_integrity/StaticPositionCheck.hpp
+                           include/pnt_integrity/NavigationDataCheck.hpp
                            include/pnt_integrity/CnoCheck.hpp
                            include/pnt_integrity/PositionJumpCheck.hpp
                            include/pnt_integrity/AgcCheck.hpp
-                           include/pnt_integrity/ClockBiasCheck.hpp)
+                           include/pnt_integrity/ClockBiasCheck.hpp
+                           include/pnt_integrity/GPSNavDataCommon.hpp
+                           include/pnt_integrity/GPSAlmanac.hpp
+                           include/pnt_integrity/GPSEphemeris.hpp)
 
 if(BUILD_ACQUISTION_CHECK)
   list(APPEND PNT_INTEGRITY_SRCS src/AcquisitionCheck.cpp)

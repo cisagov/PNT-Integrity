@@ -42,9 +42,9 @@
 #include <atomic>
 #include <deque>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <vector>
-#include <mutex>
 #include "logutils/logutils.hpp"
 #include "pnt_integrity/RepositoryEntry.hpp"
 
@@ -148,6 +148,13 @@ public:
   template <class T>
   bool getData(const double& timeOfWeek, T& data);
 
+  /// \brief Returns the newest available local data entry of type T
+  ///
+  /// \param data The requested local data entry
+  /// \param time The time of the found data
+  template <class T>
+  bool getNewestData(T& data, double& time);
+
   /// \brief Returns the remote data entry at the specified time
   ///
   /// \param timeOfWeek The time of the desired data
@@ -155,6 +162,14 @@ public:
   /// \param data The requested remote data entry
   template <class T>
   bool getData(const double& timeOfWeek, const std::string& nodeId, T& data);
+
+  /// \brief Returns the newest available remote data entry of type T
+  ///
+  /// \param nodeId The identifier string for the desired node
+  /// \param data The requested remote data entry
+  /// \param time The time of the found data
+  template <class T>
+  bool getNewestData(const std::string& nodeId, T& data, double& time);
 
   //============================================================================
   //----------------- Local GNSS Observable accessor functions -----------------
@@ -216,10 +231,10 @@ public:
   /// Defaults to 10 if this function is not called
   ///
   /// \param period The time (in seconds) that will be kept in the history
-  void setHistoryPeriod(const double& period) 
+  void setHistoryPeriod(const double& period)
   {
-    std::lock_guard<std::recursive_mutex> lock(repoMutex_); 
-    historyPeriod_ = period; 
+    std::lock_guard<std::recursive_mutex> lock(repoMutex_);
+    historyPeriod_ = period;
   };
 
   /// \brief Sets the log message handler to provided callback
@@ -245,10 +260,10 @@ public:
   /// Returns the number of time entries into the repsoitory
   ///
   /// \returns The number of time entries
-  size_t getRepoSize() 
-  { 
+  size_t getRepoSize()
+  {
     std::lock_guard<std::recursive_mutex> lock(repoMutex_);
-    return repository_.size(); 
+    return repository_.size();
   };
 
   /// \brief Returns the newest time entry
@@ -258,6 +273,15 @@ public:
   /// \param timeEntry The newest time entry returned by reference
   /// \returns True if the repository is not empty
   bool getNewestEntry(TimeEntry& timeEntry);
+
+  /// \brief Returns the time entry for the specified time
+  ///
+  /// Just a public wrapper for findEntry
+  ///
+  /// \param timeOfWeek The time to get the entry for
+  /// \param timeEntry  The time entry returned by reference
+  /// \returns True if the repository is not empty
+  bool getEntry(const double& timeOfWeek, TimeEntry& timeEntry);
 
   /// \brief Returns the newest time entries that start appear after
   /// a given time
@@ -282,6 +306,13 @@ public:
   static bool sortTimeEntry(TimeEntry& t0, TimeEntry& t1)
   {
     return (t0.timeOfWeek_ < t1.timeOfWeek_);
+  }
+
+  /// \brief Clear the repository contents.
+  void clearEntries()
+  {
+    std::lock_guard<std::recursive_mutex> lock(repoMutex_);
+    repository_.clear();
   }
 
 private:
@@ -310,9 +341,9 @@ private:
   //---------------------------- Member Variables ------------------------------
   //============================================================================
   // A map keyed on time to hold history
-  TimeEntryHistory repository_;
-  std::recursive_mutex repoMutex_; 
-  std::atomic<double> historyPeriod_;
+  TimeEntryHistory     repository_;
+  std::recursive_mutex repoMutex_;
+  std::atomic<double>  historyPeriod_;
 };
 
 //==============================================================================
@@ -320,7 +351,7 @@ private:
 //==============================================================================
 template <class T>
 void IntegrityDataRepository::addEntry(const double& timeOfWeek, const T& data)
-{ 
+{
   std::lock_guard<std::recursive_mutex> lock(repoMutex_);
 
   // Make (or copy the existing) a entry for this time
@@ -394,6 +425,39 @@ bool IntegrityDataRepository::getData(const double& timeOfWeek, T& data)
 }
 
 //------------------------------------------------------------------------------
+// Template function for newest available local data retrieval
+template <class T>
+bool IntegrityDataRepository::getNewestData(T& data, double& time)
+{
+  if (repository_.size() > 0)
+  {
+    // TimeEntryHistory::reverse_iterator rit = repository_.rbegin();
+
+    // Search backwards through time history
+    // while (rit != repository_.rbegin())
+    for (TimeEntryHistory::reverse_iterator rit = repository_.rbegin();
+         rit != repository_.rend();
+         ++rit)
+    {
+      // If data is available, return it
+      if (rit->second.localData_.getData(data))
+      {
+        time = rit->first;
+        return true;
+      }
+    }
+  }
+  else
+  {
+    // No data found in time history
+    std::stringstream errMsg;
+    errMsg << "IntegrityDataRepository::getNewestData() : No entry found ";
+    logMsg_(errMsg.str(), logutils::LogLevel::Warn);
+  }
+  return false;
+}
+
+//------------------------------------------------------------------------------
 template <class T>
 bool IntegrityDataRepository::getData(const double&      timeOfWeek,
                                       const std::string& nodeID,
@@ -433,6 +497,56 @@ bool IntegrityDataRepository::getData(const double&      timeOfWeek,
     logMsg_(errMsg.str(), logutils::LogLevel::Error);
     return false;
   }
+}
+
+//------------------------------------------------------------------------------
+template <class T>
+bool IntegrityDataRepository::getNewestData(const std::string& nodeID,
+                                            T&                 data,
+                                            double&            time)
+{
+  if (repository_.size() > 0)
+  {
+    // TimeEntryHistory::reverse_iterator rit = repository_.rbegin();
+
+    // Search backwards through time history
+    // while (rit != repository_.rbegin())
+    for (TimeEntryHistory::reverse_iterator rit = repository_.rbegin();
+         rit != repository_.rend();
+         ++rit)
+    {
+      auto remoteIt = rit->second.remoteData_.find(nodeID);
+
+      if (remoteIt != rit->second.remoteData_.end())
+      {
+        // The remote entry exists at the provided time
+
+        if (remoteIt->second.getData(data))
+        {
+          time = rit->first;
+          return true;  // The data exists
+        }
+      }
+      else
+      {
+        // The remote does not exist at the provided time
+        std::stringstream errMsg;
+        errMsg << "IntegrityDataRepository::getNewestData() : No data for "
+                  "Remote ID '"
+               << nodeID << "' at time (" << rit->second.timeOfWeek_ << ")";
+        logMsg_(errMsg.str(), logutils::LogLevel::Debug);
+      }
+      // rit++;
+    }
+  }
+  else
+  {
+    // No data found in time history
+    std::stringstream errMsg;
+    errMsg << "IntegrityDataRepository::getNewestData() : No entries found ";
+    logMsg_(errMsg.str(), logutils::LogLevel::Warn);
+  }
+  return false;
 }
 }  // namespace pnt_integrity
 #endif

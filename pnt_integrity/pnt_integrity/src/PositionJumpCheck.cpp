@@ -32,7 +32,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //----------------------------------------------------------------------------//
 //
-//  AssurancCheck class defined for the position jump check
+//  AssuranceCheck class defined for the position jump check
 //  Will Travis <will.travis@is4s.com>
 //  Josh Clanton <josh.clanton@is4s.com>
 //  November 27, 2019
@@ -53,19 +53,18 @@ bool PositionJumpCheck::handleEstimatedPositionVelocity(
   std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
 
   // if I'm using estimated position velocity, then I need to update the
-  // jump bound and save my current estimated positoin
+  // current estimated position and covariance
   if (useEstimatedPv_ && (pv.covariance[0][0] != 0.0))
   {
-    currentEstimatedPv_ = pv.position;
-    currentEstPvSet_    = true;
+    currentEstimatedPosition_ = pv.position;
+    currentEstPositionSet_    = true;
+
+    for (int ii = 0; ii < 3; ii++)
+      for (int jj = 0; jj < 3; jj++)
+        currentEstPosCovariance_[ii][jj] = pv.covariance[ii][jj];
 
     geodeticConverter_.initialiseReference(
       pv.position.latitude, pv.position.longitude, pv.position.altitude);
-
-    double covarianceBound =
-      posStdDevMultiplier_ * sqrt(pv.covariance[0][0] + pv.covariance[1][1]);
-
-    positionJumpBound_ = std::max(minimumBound_, covarianceBound);
   }
   return true;
 }
@@ -74,11 +73,15 @@ bool PositionJumpCheck::handleEstimatedPositionVelocity(
 //------------------------------ handlePositionVelocity ------------------------
 //==============================================================================
 bool PositionJumpCheck::handlePositionVelocity(
-  const data::PositionVelocity& /*posVel*/,
-  const bool& localFlag)
+  const data::PositionVelocity& posVel,
+  const bool&                   localFlag)
 {
   if (localFlag)
   {
+    {
+      std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
+      lastReceiverPv_ = posVel;
+    }
     return runCheck();
   }
   else
@@ -96,13 +99,9 @@ bool PositionJumpCheck::runCheck()
   bool                    retVal = false;
   PosJumpCheckDiagnostics diagnostics;
 
-  TimeEntry newestEntry;
-  IntegrityDataRepository::getInstance().getNewestEntry(newestEntry);
-  data::PositionVelocity posVel;
-  newestEntry.localData_.getData(posVel);
-
-  double updateTime = (double)posVel.header.timestampValid.sec +
-                      ((double)posVel.header.timestampValid.nanoseconds) / 1e9;
+  double updateTime =
+    (double)lastReceiverPv_.header.timestampValid.sec +
+    ((double)lastReceiverPv_.header.timestampValid.nanoseconds) / 1e9;
 
   // if I'm not using distance traveled or estimated pv, them I'm in
   // "platform" mode and need to update the bound with the maximum velocity
@@ -120,12 +119,12 @@ bool PositionJumpCheck::runCheck()
     // compute a distance to the last known good position and
     // compare to the bound
     distanceToLastGoodPos_ =
-      calculateDistance(posVel.position, lastKnownGoodPosition_);
+      calculateDistance(lastReceiverPv_.position, lastKnownGoodPosition_);
 
     if (checkDistance(distanceToLastGoodPos_, positionJumpBound_))
     {
       // position jump is greater than bound
-      changeAssuranceLevel(posVel.header.timestampValid.sec,
+      changeAssuranceLevel(lastReceiverPv_.header.timestampValid.sec,
                            data::AssuranceLevel::Unassured);
 
       std::stringstream msg;
@@ -138,49 +137,77 @@ bool PositionJumpCheck::runCheck()
     else
     {
       // position jump is less than bound
-      changeAssuranceLevel(posVel.header.timestampValid.sec,
+      changeAssuranceLevel(lastReceiverPv_.header.timestampValid.sec,
                            data::AssuranceLevel::Assured);
     }
     diagnostics.distance = distanceToLastGoodPos_;
     diagnostics.bound    = positionJumpBound_;
     retVal               = true;
   }
-  else if (useEstimatedPv_ && currentEstPvSet_)
+  else if (useEstimatedPv_ && currentEstPositionSet_)
   {
     double north, east, down;
-    geodeticConverter_.geodetic2Ned(posVel.position.latitude,
-                                    posVel.position.longitude,
-                                    posVel.position.altitude,
+    // current estimated position is stored as reference location in
+    // geodeticConverter by handleEstimatedPV method.  Calcualted the distance
+    // in NED from the estimated pos to the current GPS position.
+    geodeticConverter_.geodetic2Ned(lastReceiverPv_.position.latitude,
+                                    lastReceiverPv_.position.longitude,
+                                    lastReceiverPv_.position.altitude,
                                     &north,
                                     &east,
                                     &down);
 
     double distance = sqrt(north * north + east * east);
+    // TODO: change this to use a mahalanobis distance - for now est. a std dev.
+    double covN = (currentEstPosCovariance_[0][0]);
+    //+ posVel.covariance[0][0];
+    double covE = (currentEstPosCovariance_[1][1]);
+    //+ posVel.covariance[1][1];
+
+    double covarianceBound = posStdDevMultiplier_ * sqrt(covN + covE);
+
+    positionJumpBound_ = std::max(minimumBound_, covarianceBound);
 
     std::stringstream msg;
     msg << "North: " << north << " East: " << east << " Distance: " << distance
-        << " Bound: " << positionJumpBound_
+        << " Bound: " << positionJumpBound_ << " Est Std Dev: "
+        << sqrt(currentEstPosCovariance_[0][0] + currentEstPosCovariance_[1][1])
+        << " Rcvr Std Dev: "
+        << sqrt(lastReceiverPv_.covariance[0][0] +
+                lastReceiverPv_.covariance[1][1])
         << " Valid Position: " << checkDistance(distance, positionJumpBound_);
     logMsg_(msg.str(), logutils::LogLevel::Debug);
 
-    // double distance = calculateDistance(posVel.position,
-    // currentEstimatedPv_);
-    if (checkDistance(distance, positionJumpBound_))
-    {
-      // position jump is greater than bound
-      changeAssuranceLevel(posVel.header.timestampValid.sec,
-                           data::AssuranceLevel::Unassured);
+    bool   positionJump = checkDistance(distance, positionJumpBound_);
+    double rcvrStdDev =
+      sqrt(lastReceiverPv_.covariance[0][0] + lastReceiverPv_.covariance[1][1]);
 
+    if (positionJump && rcvrStdDev > 30)
+    {
+      // position jump is greater than bound but receiver estimate is poor
+      changeAssuranceLevel(lastReceiverPv_.header.timestampValid.sec,
+                           data::AssuranceLevel::Inconsistent);
       std::stringstream msg;
-      msg << "PositionJumpCheck: UNASSURED: distance to estimated position "
+      msg << "PositionJumpCheck: INCONSISTENT: distance to estimated position "
              "position: "
           << distance << " (m), jump bound: " << positionJumpBound_ << " (m)";
       logMsg_(msg.str(), logutils::LogLevel::Debug);
     }
-    else
+    else if (positionJump)
     {
       // position jump is greater than bound
-      changeAssuranceLevel(posVel.header.timestampValid.sec,
+      changeAssuranceLevel(lastReceiverPv_.header.timestampValid.sec,
+                           data::AssuranceLevel::Unassured);
+      std::stringstream msg;
+      msg << "PositionJumpCheck: UNASSURED: distance to estimated position "
+             "position: "
+          << distance << " (m), jump bound: " << minimumBound_ << " (m)";
+      logMsg_(msg.str(), logutils::LogLevel::Debug);
+    }
+    else
+    {
+      // position jump is less than bound
+      changeAssuranceLevel(lastReceiverPv_.header.timestampValid.sec,
                            data::AssuranceLevel::Assured);
     }
     diagnostics.bound    = positionJumpBound_;
@@ -189,7 +216,7 @@ bool PositionJumpCheck::runCheck()
   }
   else
   {
-    changeAssuranceLevel(posVel.header.timestampValid.sec,
+    changeAssuranceLevel(lastReceiverPv_.header.timestampValid.sec,
                          data::AssuranceLevel::Unavailable);
     diagnostics.bound    = std::numeric_limits<double>::quiet_NaN();
     diagnostics.distance = std::numeric_limits<double>::quiet_NaN();

@@ -97,7 +97,8 @@ public:
   ///
   /// \param gnssObs The provided GNSS observable data
   /// \returns True if successful
-  bool handleGnssObservables(const data::GNSSObservables& gnssObs);
+  bool handleGnssObservables(const data::GNSSObservables& gnssObs,
+                             const double&                time = 0);
 
   /// \brief Function to explicitly set the assurance level of the check
   ///

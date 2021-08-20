@@ -50,6 +50,12 @@ using namespace if_data_utils;
 
 namespace pnt_integrity
 {
+
+/// PI as defined in IS-GPS-200 (30.3.3.1.3)
+const double gpsPi = 3.1415926535898;
+/// 2 * PI as defined in IS-GPS-200 (convenience constant)
+const double twoGpsPi = 2.0 * gpsPi;
+
 //==============================================================================
 //---------------------------- acquisitionSetup() ------------------------------
 //==============================================================================
@@ -295,7 +301,7 @@ bool AcquisitionCheck::generateAcquisitionPlane(
   Eigen::VectorXcf phasePoints(numSamples);
   for (size_t ii = 0; ii < numSamples; ii++)
   {
-    phasePoints[ii] = twoGpsPi_ * (double)ii / samplingFrequency_;
+    phasePoints[ii] = twoGpsPi * (double)ii / samplingFrequency_;
   }
 
   // define PRN to search for
@@ -535,25 +541,24 @@ void AcquisitionCheck::calculateAssuranceLevel(const double& checkTime)
     {
       unavailableCount++;
     }
-
-    if (unassuredCount >= assuranceUnassuredThresh_)
-    {
-      changeAssuranceLevel(checkTime, data::AssuranceLevel::Unassured);
-    }
-    else if (inconsistentCount >= assuranceInconsistentThresh_)
-    {
-      changeAssuranceLevel(checkTime, data::AssuranceLevel::Inconsistent);
-    }
-    else if (assuredCount >= 4)
-    {
-      changeAssuranceLevel(checkTime, data::AssuranceLevel::Assured);
-    }
-    else
-    {
-      changeAssuranceLevel(checkTime, data::AssuranceLevel::Unavailable);
-    }
-
   }  // end for loop
+
+  if (unassuredCount >= assuranceUnassuredThresh_)
+  {
+    changeAssuranceLevel(checkTime, data::AssuranceLevel::Unassured);
+  }
+  else if (inconsistentCount >= assuranceInconsistentThresh_)
+  {
+    changeAssuranceLevel(checkTime, data::AssuranceLevel::Inconsistent);
+  }
+  else if (assuredCount >= 4)
+  {
+    changeAssuranceLevel(checkTime, data::AssuranceLevel::Assured);
+  }
+  else
+  {
+    changeAssuranceLevel(checkTime, data::AssuranceLevel::Unavailable);
+  }
 
   if (publishDiagnostics_)
   {

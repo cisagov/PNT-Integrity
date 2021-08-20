@@ -60,11 +60,11 @@ const std::string INTEGRITY_RNG_POS_DIAG_MIN_MEAS =
   "INTEGRITY_RNG_POS_DIAG_MIN_MEAS";
 
 /// Definition of 'pi' to use in this check
-const double pi = 3.1415926535898;
+static const double pi = 3.1415926535898;
 /// Convenience constant for 1/2 pi
-const double deg2rad = pi / 180.0;
+static const double deg2rad = pi / 180.0;
 /// Convenience converter for radians to degrees
-const double rad2deg = 1.0 / deg2rad;
+static const double rad2deg = 1.0 / deg2rad;
 
 /// \brief Structure for check diagnostics
 struct RngPosCheckNodeDiagnostic
@@ -157,9 +157,9 @@ private:
                           const RemoteRepoEntries& remoteEntries);
 
   bool compareRanges(const data::PositionVelocity& posVel1,
-                            const data::PositionVelocity& posVel2,
-                            const data::MeasuredRange&    measRange,
-                            RngPosCheckNodeDiagnostic&    diagnostic);
+                     const data::PositionVelocity& posVel2,
+                     const data::MeasuredRange&    measRange,
+                     RngPosCheckNodeDiagnostic&    diagnostic);
 
   std::map<std::string, data::AssuranceLevel> rangeCheckLevels_;
 

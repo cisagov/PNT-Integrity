@@ -61,7 +61,7 @@ void AssuranceCheck::changeAssuranceLevel(const double& updateTime,
               << (int)assuranceState_.getAssuranceLevel()
               << " at time : " << std::setprecision(20) << updateTime;
 
-    logMsg_(changeMsg.str(), logutils::LogLevel::Debug2);
+    logMsg_(changeMsg.str(), logutils::LogLevel::Debug);
   }
   else if (newLevel > assuranceState_.getAssuranceLevel())
   {

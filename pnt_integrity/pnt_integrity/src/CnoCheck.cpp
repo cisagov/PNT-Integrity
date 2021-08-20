@@ -45,7 +45,8 @@ namespace pnt_integrity
 //==============================================================================
 //------------------------ handleGnssObservables -------------------------------
 //==============================================================================
-bool CnoCheck::handleGnssObservables(const data::GNSSObservables& /*gnssObs*/)
+bool CnoCheck::handleGnssObservables(const data::GNSSObservables& /*gnssObs*/,
+                                     const double& /*time*/)
 {
   // data has already been added to the repo by the integrity monitor
   return runCheck();
@@ -77,7 +78,10 @@ bool CnoCheck::runCheck()
       for (auto mapIt = localObsMap.begin(); mapIt != localObsMap.end();
            ++mapIt)
       {
-        cnoVals.push_back(mapIt->second.carrierToNoise);
+        if (mapIt->second.carrierToNoise > 0)
+        {
+          cnoVals.push_back(mapIt->second.carrierToNoise);
+        }
       }
 
       // proceed only if we have cno values to process

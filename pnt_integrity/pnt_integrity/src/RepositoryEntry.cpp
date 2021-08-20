@@ -49,8 +49,8 @@ namespace pnt_integrity
 bool RepositoryEntry::getData(const uint32_t&       satelliteID,
                               data::GNSSObservable& gnssObs) const
 {
-  auto prnIt = gnssObsMap_.find(satelliteID);
-  if (prnIt != gnssObsMap_.end())
+  auto prnIt = gnssObservables_.observables.find(satelliteID);
+  if (prnIt != gnssObservables_.observables.end())
   {
     gnssObs = prnIt->second;
 

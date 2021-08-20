@@ -46,7 +46,7 @@ namespace pnt_integrity
 bool AgcCheck::runCheck()
 {
   std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-  
+
   double checkTime = currentAgcVals_.header.timestampValid.sec;
 
   AgcCheckDiagnostics diagnostics;

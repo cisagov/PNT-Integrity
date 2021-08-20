@@ -51,7 +51,7 @@ namespace pnt_integrity
 void IntegrityDataRepository::addEntry(const double&               timeOfWeek,
                                        const uint32_t&             satelliteID,
                                        const data::GNSSObservable& gnssObs)
-{  
+{
   std::lock_guard<std::recursive_mutex> lock(repoMutex_);
 
   // Make (or copy the existing) a entry for this time
@@ -105,7 +105,7 @@ void IntegrityDataRepository::addEntry(const double&               timeOfWeek,
 
   // look for a corresponding time entry
   TimeEntry entry = makeEntry(timeOfWeek);
-  
+
   // make sure remote observable exists for this time, if not create it
   auto remoteIt = entry.remoteData_.find(nodeID);
   if (remoteIt != entry.remoteData_.end())
@@ -131,7 +131,7 @@ void IntegrityDataRepository::addEntry(const double&               timeOfWeek,
   }
   // add the entry back to the history
   repository_[timeOfWeek] = entry;
-  
+
   manageHistory();
 }
 
@@ -203,7 +203,7 @@ bool IntegrityDataRepository::findEntry(const double& timeOfWeek,
 bool IntegrityDataRepository::getNewestEntry(TimeEntry& timeEntry)
 {
   std::lock_guard<std::recursive_mutex> repoLock(repoMutex_);
-  
+
   if (repository_.size() > 0)
   {
     TimeEntryHistory::reverse_iterator rit = repository_.rbegin();
@@ -216,6 +216,13 @@ bool IntegrityDataRepository::getNewestEntry(TimeEntry& timeEntry)
             logutils::LogLevel::Error);
     return false;
   }
+}
+
+//------------------------------------------------------------------------------
+bool IntegrityDataRepository::getEntry(const double& timeOfWeek,
+                                       TimeEntry&    timeEntry)
+{
+  return findEntry(timeOfWeek, timeEntry);
 }
 
 //------------------------------------------------------------------------------
@@ -291,7 +298,7 @@ TimeEntry& IntegrityDataRepository::makeEntry(const double& timeOfWeek)
 void IntegrityDataRepository::manageHistory()
 {
   std::lock_guard<std::recursive_mutex> lock(repoMutex_);
-  TimeEntryHistory::iterator repoIt;
+  TimeEntryHistory::iterator            repoIt;
 
   // the history map is ordered on the key time, so the newest entries will
   // go at the end of the map. The logic here is to get the newest (last) entry
@@ -305,41 +312,17 @@ void IntegrityDataRepository::manageHistory()
   repoIt--;  // decrement the iterator so it points to the last element
   double oldestHistoryTime = repoIt->first - historyPeriod_;
 
-  bool historyTrimmed = false;
-  while (!historyTrimmed)
-  {
-    // find the first entry with an old time, delete it, and check again
-    for (repoIt = repository_.begin(); repoIt != repository_.end(); repoIt++)
-    {
-      // std::cout << std::setprecision(15) << "entry: " << repoIt->first << std::endl;
-      // if a map entry is old, erase it
-      if (repoIt->first < oldestHistoryTime)
-      {
-        // std::stringstream eraseMsg;
-        // eraseMsg << "IntegrityDataRepository: Removing time entry at: "
-        //          << std::setprecision(20) << repoIt->first;
-        // logMsg_(eraseMsg.str(), logutils::LogLevel::Info);
+  auto end_erase = repository_.upper_bound(oldestHistoryTime);
+  
+  std::stringstream eraseMsg;
+  eraseMsg << "IntegrityDataRepository: " << std::setprecision(20)
+           << " Newest time = " << repoIt->first
+           << "  , Removing time entries older than: " << end_erase->first
+           << " , oldestHistoryTime=" << oldestHistoryTime
+           << " , historyPeriod_=" << historyPeriod_;
+  logMsg_(eraseMsg.str(), logutils::LogLevel::Debug);
 
-        try 
-        {
-          // std::cout  << "erasing: " << repoIt->first << ", " << repoIt->second.timeOfWeek_<< std::endl;
-          repository_.erase(repoIt);
-        }
-        catch (std::exception& e)
-        {
-          std::stringstream log_str;
-          log_str << __FUNCTION__ << "() error: " << e.what() << std::endl;
-          logMsg_(log_str.str(), logutils::LogLevel::Error);
-        }
-        // kill the for loop so it will restart with updated iterators after
-        // the deletion
-        break;
-      }
-    }
-    // std::cout << "-------------------" << std::endl;
-    // if program execution makes it here, it means that no old time keys
-    // were found, therefore history is trimmed
-    historyTrimmed = true;
-  }
+  repository_.erase(repository_.begin(), end_erase);
+
 }
 }  // namespace pnt_integrity

@@ -117,7 +117,7 @@ void RangePositionCheck::rangePositionCheck(
     // go through each remote and compare the differenced position to the
     // measured range (if available)
     for (auto remoteIt = remoteEntries.begin(); remoteIt != remoteEntries.end();
-        ++remoteIt)
+         ++remoteIt)
     {
       rangeCheckLevels_[remoteIt->first] = data::AssuranceLevel::Unavailable;
 
@@ -156,11 +156,6 @@ void RangePositionCheck::rangePositionCheck(
           " or remote position is not valid. Check not valid.",
           logutils::LogLevel::Debug);
       }
-    }
-    calculateAssuranceLevel(checkTime);
-    if (publishDiagnostics_)
-    {
-      publishDiagnostics_(checkTime, diagnostics);
     }
   }
 
@@ -270,7 +265,7 @@ void RangePositionCheck::calculateAssuranceLevel(const double& checkTime)
         break;
     }
   }
-  
+
   // set overall level based on counts
   if (unusableCount > 0)
   {

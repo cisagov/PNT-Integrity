@@ -126,7 +126,7 @@ bool ClockBiasCheck::clockBiasCheck(const double& checkTime)
   }
 
   char logBuf[1024];
-  sprintf(logBuf, "\ndriftExp: %0.9lf\ndriftVar: %0.9lf", driftExp, driftVar);
+  snprintf(logBuf, 1024, "\ndriftExp: %0.9lf\ndriftVar: %0.9lf", driftExp, driftVar);
   std::string logStr(logBuf);
 
   logMsg_(logStr, logutils::LogLevel::Debug);
@@ -139,14 +139,14 @@ bool ClockBiasCheck::clockBiasCheck(const double& checkTime)
   // propagate the next to last sample forward using that average drift rate
   double offset_propd = (offsetVec_.rbegin() + 1)->offset + (driftExp * dt);
 
-  sprintf(logBuf,
+  snprintf(logBuf, 1024,
           "offset_propd vs offsetVec_.rbegin()->offset:\n  %0.9lf\n  %0.9lf",
           offset_propd,
           offsetVec_.rbegin()->offset);
   logStr.assign(logBuf);
   logMsg_(logStr, logutils::LogLevel::Debug);
 
-  sprintf(logBuf,
+  snprintf(logBuf, 1024,
           "fabs(offset_propd - offsetVec_.rbegin()->offset) vs driftRateBound_ "
           "* dt:\n  %0.9lf\n  %0.9lf",
           fabs(offset_propd - offsetVec_.rbegin()->offset),
@@ -208,7 +208,7 @@ void ClockBiasCheck::pruneVec()
 }
 
 //==============================================================================
-//----------------------------- enoughSampleTime ---------------------------------
+//--------------------------- enoughSampleTime ---------------------------------
 //==============================================================================
 bool ClockBiasCheck::enoughSampleTime()
 {

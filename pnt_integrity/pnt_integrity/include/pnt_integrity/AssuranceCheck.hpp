@@ -54,7 +54,7 @@ using MultiPrnAssuranceMap = std::map<int, data::AssuranceLevel>;
 /// Pure virtual parent class that holds common functionality accross all
 /// assurance checks. Any child class that inherits from this must lock
 /// assuranceCheckMutex_ before access any protected data in this class.
-/// Any child class that inherits from this class can also use 
+/// Any child class that inherits from this class can also use
 /// assuranceCheckMutex_ to protect private data in the child class.
 class AssuranceCheck
 {
@@ -75,6 +75,7 @@ public:
     , prnAssuranceLevels_()
     , assuranceInconsistentThresh_(1.0)
     , assuranceUnassuredThresh_(2.0)
+    , assuranceAssuredThresh_(3.0)
     , checkName_(checkName)
     , assuranceLevelPeriod_(2.0)
     , lastAssuranceUpdate_(0.0)
@@ -84,9 +85,7 @@ public:
     , allowPositiveWeighting_(true)
     , multiPrnSupport_(multiPrnSupport)
     , assuranceState_()
-    , weight_(1.0)
-  {
-  };
+    , weight_(1.0){};
 
   virtual ~AssuranceCheck() = default;
 
@@ -95,7 +94,18 @@ public:
   /// Function to handle provided GNSS Observables. (virtual)
   ///
   /// \returns True if successful
-  virtual bool handleGnssObservables(const data::GNSSObservables& /*gnssObs*/)
+  virtual bool handleGnssObservables(const data::GNSSObservables& /*gnssObs*/,
+                                     const double& /*time*/)
+  {
+    return false;
+  };
+
+  /// \brief Handler function for GNSS Subframes
+  ///
+  /// Function to handle provided GNSS Broadcast Nav. Data. (virtual)
+  ///
+  /// \returns True if successful
+  virtual bool handleGnssSubframe(const data::GNSSSubframe& /*gnssSubframe*/)
   {
     return false;
   };
@@ -187,6 +197,16 @@ public:
     return false;
   };
 
+  /// \brief Handler function for RF Spectrum value
+  ///
+  /// Function to handle provided RF Spectrum values (virtual)
+  ///
+  /// \returns True if successful
+  virtual bool handleRfSpectrum(const data::RfSpectrum& /*value*/)
+  {
+    return false;
+  };
+
   /// \brief Handler function for AGC value
   ///
   /// Function to handle provided AGC values (virtual)
@@ -204,23 +224,24 @@ public:
 
   /// \brief Returns the interger value associated with the check's
   /// AssuranceState
-  double getAssuranceValue() 
-  { 
+  double getAssuranceValue()
+  {
     std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-    return assuranceState_.getAssuranceValue();;
+    return assuranceState_.getAssuranceValue();
+    ;
   };
 
   /// \brief Returns the AssuranceState of the check
-  data::AssuranceState getAssuranceState() 
-  { 
+  data::AssuranceState getAssuranceState()
+  {
     std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-    return assuranceState_; 
+    return assuranceState_;
   };
 
   /// \brief Function to calculate the assurance level of the check
   ///
   /// Child classes should define this function to calculate the
-  /// assurance level of the check by using whatever data / calculation 
+  /// assurance level of the check by using whatever data / calculation
   /// necessary
   virtual void calculateAssuranceLevel(const double& time) = 0;
 
@@ -230,23 +251,31 @@ public:
   /// indicate or trigger a transition into different assurance levels
   /// associated with the check
   ///
-  /// \param unknownThresh Use this threshold to trigger or indicate a
+  /// \param inconsistentThresh Use this threshold to trigger or indicate a
   ///                      transition into AssuranceLevel::Inconsistent
-  /// \param unusableThresh Use this value to trigger or indicate a
+  /// \param unassuredThresh Use this value to trigger or indicate a
   ///                      transition into AssuranceLevel::Unassured
-  void setAssuranceThresholds(const double& unknownThresh,
-                              const double& unusableThresh)
+  void setAssuranceThresholds(
+    const double& inconsistentThresh,
+    const double& unassuredThresh,
+    const double& assuredThresh = std::numeric_limits<double>::quiet_NaN())
   {
     std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
 
     std::stringstream threshMsg;
     threshMsg << checkName_ << ": changing thresholds to: " << std::endl;
-    threshMsg << "unknown thresh: " << unknownThresh << std::endl;
-    threshMsg << "unusable thresh: " << unusableThresh;
+    threshMsg << "inconsistent thresh: " << inconsistentThresh << std::endl;
+    threshMsg << "unassured thresh: " << unassuredThresh;
+    if (!std::isnan(assuredThresh))
+    {
+      threshMsg << "assured thresh: " << assuredThresh;
+      assuranceAssuredThresh_ = assuredThresh;
+    }
+
     logMsg_(threshMsg.str(), logutils::LogLevel::Info);
 
-    assuranceInconsistentThresh_ = unknownThresh;
-    assuranceUnassuredThresh_    = unusableThresh;
+    assuranceInconsistentThresh_ = inconsistentThresh;
+    assuranceUnassuredThresh_    = unassuredThresh;
   }
 
   /// \brief Triggers a manual check calculation
@@ -267,17 +296,20 @@ public:
   };
 
   /// \brief Enables support for multiple prn checks
-  void enableMultiPrnSupport() 
-  { 
+  void enableMultiPrnSupport()
+  {
     std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-    multiPrnSupport_ = true; 
+    multiPrnSupport_ = true;
   };
 
+  /// \brief Returns value of multiPrnSupport_
+  bool hasMultiPrnSupport() { return multiPrnSupport_; };
+
   /// \brief Returns the name of the check
-  std::string getName() 
-  { 
+  std::string getName()
+  {
     std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-    return checkName_; 
+    return checkName_;
   };
 
   /// \brief Changes the check's assurance level to the provided value
@@ -305,7 +337,7 @@ public:
   void setAssuranceLevelPeriod(const double& levelPeriod)
   {
     std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-    std::stringstream levelMsg;
+    std::stringstream                     levelMsg;
     levelMsg << checkName_
              << ": changing assurance level period to: " << levelPeriod;
     logMsg_(levelMsg.str(), logutils::LogLevel::Info);
@@ -331,6 +363,18 @@ public:
     lastKnownGoodSet_          = true;
   }
 
+  /// \brief Clears the last known good position
+  virtual void clearLastGoodPosition()
+  {
+    std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
+
+    lastKnownGoodPosition_ = data::GeodeticPosition3d();
+    lastKnownGoodPositionTime_ = 0;
+    lastKnownGoodSet_ = false;
+  }
+
+
+
   /// \brief Provides the check with an updated position and assuarance level
   ///
   /// This method provides the check function with an updted position and
@@ -348,19 +392,19 @@ public:
   /// check with other checks for a cumulative assurance level
   ///
   /// \param weightVal The weight for this check
-  void setWeight(const double& weightVal) 
-  { 
+  void setWeight(const double& weightVal)
+  {
     std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-    weight_ = weightVal; 
+    weight_ = weightVal;
   }
 
   /// \brief Returns the weight for the check
   ///
   /// \returns The weight for the check
-  double getWeight() 
-  { 
+  double getWeight()
+  {
     std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-    return weight_; 
+    return weight_;
   };
 
   /// \brief Sets the positive check weighting allowed boolean
@@ -399,11 +443,22 @@ public:
     }
   }
 
-protected:
+  /// \brief Reset the check state
+  void reset()
+  {
+    std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
+    lastKnownGoodSet_ = false;
+    prnAssuranceLevels_.clear();
+    assuranceState_.setWithLevel(data::AssuranceLevel::Unavailable);
+    lastKnownGoodPosition_ = data::GeodeticPosition3d();
+    lastKnownGoodPositionTime_ = 0;
+    lastKnownGoodSet_ = false;
+  }
 
+protected:
   // Mutex to protect all class memmber data - any child class that accesses
   // protected data directly, must first lock this mutex
-  std::recursive_mutex assuranceCheckMutex_; 
+  std::recursive_mutex assuranceCheckMutex_;
 
   // Local log message function
   logutils::LogCallback logMsg_;
@@ -421,6 +476,11 @@ protected:
   /// level to AssuranceLevel::Unassured. It is up to the AssuranceCheck
   /// implementation on how this threshold is used internally.
   double assuranceUnassuredThresh_;
+
+  /// The arbitrary threshold for elevating the check's overall assurance
+  /// level to AssuranceLevel::Assured. It is up to the AssuranceCheck
+  /// implementation on how this threshold is used internally.
+  double assuranceAssuredThresh_;
 
   /// The name of the check
   std::string checkName_;
@@ -450,7 +510,7 @@ protected:
   /// \param pos2 The second position
   /// \returns The calculated distance
   static double calculateDistance(const data::GeodeticPosition3d& pos1,
-                           const data::GeodeticPosition3d& pos2);
+                                  const data::GeodeticPosition3d& pos2);
 
   /// \brief Checks if the distance between two points is greater than the
   /// provided threshold
@@ -460,9 +520,9 @@ protected:
   /// \param distance The calculated distance
   /// \returns True if distance is greater than provided threshold
   static bool checkDistance(const data::GeodeticPosition3d& pos1,
-                     const data::GeodeticPosition3d& pos2,
-                     const double&                   distanceThresh,
-                     double&                         distance)
+                            const data::GeodeticPosition3d& pos2,
+                            const double&                   distanceThresh,
+                            double&                         distance)
   {
     distance = calculateDistance(pos1, pos2);
     return checkDistance(distance, distanceThresh);

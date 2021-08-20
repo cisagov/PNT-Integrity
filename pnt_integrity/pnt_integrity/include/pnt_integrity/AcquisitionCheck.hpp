@@ -166,7 +166,6 @@ public:
     , highPowerThreshold_(highPowerThreshold)
     , peakRatioThreshold_(peakRatioThreshold)
     , acquisitionThreshold_(acqusitionThreshold)
-    , twoGpsPi_(3.14159265359)
     , lastProcessTime_(0.0)
     , samplesPerIntPeriod_(0)
     , samplesPerCode_(0)
@@ -309,8 +308,6 @@ private:
   double highPowerThreshold_;
   double peakRatioThreshold_;
   double acquisitionThreshold_;
-
-  double twoGpsPi_;
 
   double lastProcessTime_;
 

@@ -39,7 +39,6 @@
 #include "pnt_integrity/IntegrityMonitor.hpp"
 #include <math.h>
 #include <stdio.h> /* printf */
-#include <iostream>
 
 namespace pnt_integrity
 {
@@ -83,11 +82,40 @@ void IntegrityMonitor::handleGnssObservables(
   // add the provided observable to the repos as either a local or remote
   // determined by the provided flag
 
-  addDataToRepo(getFullValidTime(gnssObs.header),
-                gnssObs.observables,
-                localFlag,
-                gnssObs.header.deviceId);
+  double timestampOfValidity;
 
+  if (getRoundedValidTime(gnssObs.header, timestampOfValidity))
+  {
+    double time = getCorrectedEntryTime(
+      timestampOfValidity, gnssObs, localFlag, gnssObs.header.deviceId);
+
+    addDataToRepo(time, gnssObs, localFlag, gnssObs.header.deviceId);
+
+    // grant shared access to the checks_ vector
+    std::shared_lock<std::shared_timed_mutex> lock(checkMutex_);
+
+    // loop through all checks and call the handler for this data type
+    AssuranceChecks::const_iterator checkIt;
+    for (checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
+    {
+      checkIt->second->handleGnssObservables(gnssObs, time);
+
+      if (checkIt->second->hasMultiPrnSupport())
+      {
+        setMultiPrnAssuranceData(checkIt->second->getMultiPrnAssuranceData());
+      }
+    }
+  }
+  // calculated the total assurance level based on the latest info
+  determineAssuranceLevels();
+}
+
+//==============================================================================
+//-------------------------- handleGnssSubframe -----------------------------
+//==============================================================================
+void IntegrityMonitor::handleGnssSubframe(const data::GNSSSubframe& gnssObs,
+                                          const bool& /*localFlag*/)
+{
   // grant shared access to the checks_ vector
   std::shared_lock<std::shared_timed_mutex> lock(checkMutex_);
 
@@ -95,8 +123,9 @@ void IntegrityMonitor::handleGnssObservables(
   AssuranceChecks::const_iterator checkIt;
   for (checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
   {
-    checkIt->second->handleGnssObservables(gnssObs);
+    checkIt->second->handleGnssSubframe(gnssObs);
   }
+  determineAssuranceLevels();
 }
 
 //==============================================================================
@@ -107,13 +136,15 @@ void IntegrityMonitor::handleDistanceTraveled(
 {
   // grant shared access to the checks_ vector
   std::shared_lock<std::shared_timed_mutex> lock(checkMutex_);
-  
+
   // loop through all checks and call the handler for this data type
   AssuranceChecks::const_iterator checkIt;
   for (checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
   {
     checkIt->second->handleDistanceTraveled(dist);
   }
+
+  determineAssuranceLevels();
 }
 
 //==============================================================================
@@ -125,48 +156,48 @@ void IntegrityMonitor::handlePositionVelocity(
 {
   // add the provided data to the repos as either a local or remote
   // determined by the provided flag
-  addDataToRepo(
-    getFullValidTime(posVel.header), posVel, localFlag, posVel.header.deviceId);
+  double timestampOfValidity;
 
-  AssuranceChecks::const_iterator checkIt;
-  // grant shared access to the checks_ vector
-  { 
+  if (getRoundedValidTime(posVel.header, timestampOfValidity))
+  {
+    addDataToRepo(
+      timestampOfValidity, posVel, localFlag, posVel.header.deviceId);
+
+    AssuranceChecks::const_iterator checkIt;
+    // grant shared access to the checks_ vector
+    {
+      std::shared_lock<std::shared_timed_mutex> lock(checkMutex_);
+
+      // loop through all checks and call the handler for this data type
+      for (checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
+      {
+        checkIt->second->handlePositionVelocity(posVel, localFlag);
+      }
+    }
+
+    // calculated the total assurance level based on the latest info
+    determineAssuranceLevels();
+
+    // grant shared access to the checks_ vector
     std::shared_lock<std::shared_timed_mutex> lock(checkMutex_);
+    // locking the assuranceState_ and lastKnownGoodPosition_
+    std::lock_guard<std::mutex> classLock(monitorMutex_);
+    // set the last known good position if the level is assured
+    if ((assuranceState_.getAssuranceLevel() ==
+         data::AssuranceLevel::Assured) &&
+        localFlag)
+    {
+      setLastKnownGoodPosition(posVel);
+    }
 
-    // loop through all checks and call the handler for this data type
+    // update each check with the latest position and assurance level
     for (checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
     {
-      checkIt->second->handlePositionVelocity(posVel, localFlag);
+      checkIt->second->setPositionAssurance(
+        posVel.header.timestampValid.sec,
+        posVel.position,
+        assuranceState_.getAssuranceLevel());
     }
-  }
-  
-  // calculated the total assurance level based on the latest info
-  determineAssuranceLevels();
-
-  // grant shared access to the checks_ vector
-  std::shared_lock<std::shared_timed_mutex> lock(checkMutex_);
-  // locking the assuranceState_ and lastKnownGoodPosition_
-  std::lock_guard<std::mutex> classLock(monitorMutex_);
-  // set the last known good position if the level is assured
-  if ((assuranceState_.getAssuranceLevel() == data::AssuranceLevel::Assured) &&
-      localFlag)
-  {
-    lastKnownGoodPosition_ = posVel.position;
-
-    // set the last good position in all of the checks
-    for (checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
-    {
-      checkIt->second->setLastGoodPosition(posVel.header.timestampValid.sec,
-                                           lastKnownGoodPosition_);
-    }
-  }
-
-  // update each check with the latest position and assurance level
-  for (checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
-  {
-    checkIt->second->setPositionAssurance(posVel.header.timestampValid.sec,
-                                          posVel.position,
-                                          assuranceState_.getAssuranceLevel());
   }
 }
 
@@ -200,17 +231,22 @@ void IntegrityMonitor::handleMeasuredRange(const data::MeasuredRange& range,
 {
   // add the provided data to the repos as either a local or remote
   // determined by the provided flag
-  addDataToRepo(
-    getFullValidTime(range.header), range, localFlag, range.header.deviceId);
+  double timestampOfValidity;
 
-  // grant shared access to the checks_ vector
-  std::shared_lock<std::shared_timed_mutex> lock(checkMutex_);
-
-  // loop through all checks and call the handler for this data type
-  AssuranceChecks::const_iterator checkIt;
-  for (checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
+  if (getRoundedValidTime(range.header, timestampOfValidity))
   {
-    checkIt->second->handleMeasuredRange(range);
+    addDataToRepo(timestampOfValidity, range, localFlag, range.header.deviceId);
+
+    // grant shared access to the checks_ vector
+    std::shared_lock<std::shared_timed_mutex> lock(checkMutex_);
+
+    // loop through all checks and call the handler for this data type
+    for (auto checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
+    {
+      checkIt->second->handleMeasuredRange(range);
+    }
+
+    determineAssuranceLevels();
   }
 }
 
@@ -220,17 +256,23 @@ void IntegrityMonitor::handleMeasuredRange(const data::MeasuredRange& range,
 void IntegrityMonitor::handleClockOffset(const data::ClockOffset& clockOffset,
                                          const bool&              localFlag)
 {
-  addDataToRepo(getFullValidTime(clockOffset.header),
-                clockOffset,
-                localFlag,
-                clockOffset.header.deviceId);
+  double timestampOfValidity;
 
-  // grant shared access to the checks_ vector
-  std::shared_lock<std::shared_timed_mutex> lock(checkMutex_);
-
-  for (auto checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
+  if (getRoundedValidTime(clockOffset.header, timestampOfValidity))
   {
-    checkIt->second->handleClockOffset(clockOffset);
+    addDataToRepo(
+      timestampOfValidity, clockOffset, localFlag, clockOffset.header.deviceId);
+
+    // grant shared access to the checks_ vector
+    std::shared_lock<std::shared_timed_mutex> lock(checkMutex_);
+
+    // loop through all checks and call the handler for this data type
+    for (auto checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
+    {
+      checkIt->second->handleClockOffset(clockOffset);
+    }
+
+    determineAssuranceLevels();
   }
 }
 
@@ -241,11 +283,13 @@ void IntegrityMonitor::handleAGC(const data::AgcValue& agcValue)
 {
   // grant shared access to the checks_ vector
   std::shared_lock<std::shared_timed_mutex> lock(checkMutex_);
-  
+
   for (auto checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
   {
     checkIt->second->handleAGC(agcValue);
   }
+
+  determineAssuranceLevels();
 }
 //==============================================================================
 //-------------------------- determineAssuranceLevels -------------------------
@@ -321,5 +365,46 @@ data::AssuranceReports IntegrityMonitor::getAssuranceReports()
   }
   return newReports;
 }
+
+void IntegrityMonitor::reset()
+{
+  IntegrityDataRepository::getInstance().clearEntries();
+
+  for (auto check : checks_)
+  {
+    check.second->reset();
+  }
+
+  prnAssuranceLevels_.clear();
+  assuranceState_.setWithLevel(data::AssuranceLevel::Unavailable);
+  lastKnownGoodPosition_ = data::GeodeticPosition3d();
+}
+
+  void IntegrityMonitor::setLastKnownGoodPosition(const data::PositionVelocity& posVel)
+  {
+      lastKnownGoodPosition_ = posVel.position;
+
+    AssuranceChecks::const_iterator checkIt;
+      // set the last good position in all of the checks
+      for (checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
+      {
+        checkIt->second->setLastGoodPosition(posVel.header.timestampValid.sec,
+                                             lastKnownGoodPosition_);
+      }
+  }
+
+  void IntegrityMonitor::clearLastKnownGoodPosition()
+  {
+      lastKnownGoodPosition_ = data::GeodeticPosition3d();
+      
+      AssuranceChecks::const_iterator checkIt;
+      // set the last good position in all of the checks
+      for (checkIt = checks_.begin(); checkIt != checks_.end(); ++checkIt)
+      {
+        checkIt->second->clearLastGoodPosition();
+      }
+
+  }
+
 
 }  // namespace pnt_integrity

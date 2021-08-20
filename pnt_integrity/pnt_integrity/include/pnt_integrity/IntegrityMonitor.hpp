@@ -44,10 +44,10 @@
 
 #include <iomanip>
 #include <memory>
-#include <sstream>
-#include <vector>
 #include <mutex>
 #include <shared_mutex>
+#include <sstream>
+#include <vector>
 
 /// Namespace for all pnt_integrity applications
 namespace pnt_integrity
@@ -89,6 +89,13 @@ public:
   bool registerCheck(const std::string& checkName, AssuranceCheck* checkPtr);
 
   /// \brief Return function for the multi-prn assurance data
+  // TODO: This method really needs to be smarter, maybe make it a time vector
+  void setMultiPrnAssuranceData(MultiPrnAssuranceMap al)
+  {
+    prnAssuranceLevels_ = al;
+  }
+
+  /// \brief Return function for the multi-prn assurance data
   MultiPrnAssuranceMap getMultiPrnAssuranceData()
   {
     std::lock_guard<std::mutex> lock(monitorMutex_);
@@ -103,10 +110,10 @@ public:
   };
 
   /// \brief Returns overall assurance value
-  double getAssuranceValue() 
-  { 
+  double getAssuranceValue()
+  {
     std::lock_guard<std::mutex> lock(monitorMutex_);
-    return assuranceState_.getAssuranceValue(); 
+    return assuranceState_.getAssuranceValue();
   }
 
   /// \brief Returns assurance reports from all registered checks
@@ -125,6 +132,17 @@ public:
   /// \param gnssObs The provided data message
   void handleGnssObservables(const data::GNSSObservables& gnssObs,
                              const bool&                  localFlag = true);
+
+  /// \brief Handler function for GNSSSubframe
+  ///
+  /// Call this function on receipt of a GNSSSubframe message. The function
+  /// will call the handleGnssSubframe in all registered checks
+  /// \param localFlag A flag to indicate if the source of the observable data
+  ///                  is from a local or remote source (defaults to "True")
+  ///
+  /// \param gnssObs The provided data message
+  void handleGnssSubframe(const data::GNSSSubframe& gnssObs,
+                          const bool&               localFlag = true);
 
   /// \brief Handler function for PositionVelocity messages
   ///
@@ -190,6 +208,18 @@ public:
   /// \param agcValue The current AGC setting from a a receiver
   void handleAGC(const data::AgcValue& agcValue);
 
+  /// \brief Template function that determines the correct timestamp
+  ///
+  /// \param time The timestamp used for time entries into the repo
+  /// \param data The received data message /structure to be entered
+  /// \param local A flag to indicate if the data is local or remote data
+  /// \param deviceId A string to identify remote data entries
+  template <class T>
+  double getCorrectedEntryTime(const double&      time,
+                               const T&           data,
+                               const bool&        local    = true,
+                               const std::string& deviceId = std::string());
+
   /// \brief Template function that adds received data to the repository
   ///
   /// \param time The timestamp used for time entries into the repo
@@ -217,10 +247,10 @@ public:
   /// monitor
   ///
   /// \returns The number of assurance checks
-  size_t getNumUsedChecks() 
-  { 
+  size_t getNumUsedChecks()
+  {
     std::lock_guard<std::mutex> lock(monitorMutex_);
-    return checksUsed_.size(); 
+    return checksUsed_.size();
   };
 
   /// \brief Returns a flag to indicate if check was used in current
@@ -238,10 +268,16 @@ public:
     return false;
   };
 
-private:
+  /// \brief Reset the integrity monitor
+  void reset();
 
+  void setLastKnownGoodPosition(const data::PositionVelocity& posVel);
+  
+  void clearLastKnownGoodPosition();
+
+private:
   std::shared_timed_mutex checkMutex_;
-  AssuranceChecks checks_;
+  AssuranceChecks         checks_;
 
   // class level mutex for thread safety
   std::mutex monitorMutex_;
@@ -256,13 +292,124 @@ private:
 
   std::vector<std::string> checksUsed_;
 
-  double getFullValidTime(const data::Header& header)
+  bool getRoundedValidTime(const data::Header& header, double& timestampValid)
   {
-    double fullSeconds = (double)header.timestampValid.sec;
-    double fracSeconds = ((double)(header.timestampValid.nanoseconds)) / 1e9;
-    return (std::round(fullSeconds + fracSeconds));
+    // throw out measurements with large differences in arrival and validity
+    // timestamps
+    bool valid =
+      std::abs(header.timestampArrival.sec - header.timestampValid.sec) < 5;
+
+    if (valid)
+    {
+      double fullSeconds = (double)header.timestampValid.sec;
+      double fracSeconds = ((double)(header.timestampValid.nanoseconds)) / 1e9;
+
+      timestampValid = std::round(fullSeconds + fracSeconds);
+    }
+    else
+    {
+      std::cout << "Ignoring invalid timestamp. Arrival: "
+                << header.timestampArrival.sec
+                << " Validity: " << header.timestampValid.sec << std::endl;
+      timestampValid = 0;
+    }
+
+    return valid;
   }
 };
+
+//==================================================================
+//------------------------getCorrectedEntryTime-----------------------
+//==================================================================
+template <class T>
+double IntegrityMonitor::getCorrectedEntryTime(const double&      time,
+                                               const T&           data,
+                                               const bool&        localFlag,
+                                               const std::string& deviceId)
+{
+  std::stringstream msg;
+  msg << std::setprecision(10);
+  msg << "IntegrityMonitor::getCorrectEntryTime: input time: " << time;
+
+  // Retrieve most recent available type T data from repository
+  T      lastData;
+  double lastDataTime;
+  double newTime       = time;
+  bool   foundLastData = false;
+
+  if (localFlag)
+  {
+    foundLastData = IntegrityDataRepository::getInstance().getNewestData(
+      lastData, lastDataTime);
+  }
+  else
+  {
+    foundLastData = IntegrityDataRepository::getInstance().getNewestData(
+      deviceId, lastData, lastDataTime);
+  }
+
+  if (!foundLastData)
+  {
+    // logMsg_("!foundLastData", logutils::LogLevel::Debug);
+    // Do nothing
+  }
+  else if ((time - lastDataTime) == 1)
+  {  // If TimeEnty time indices are consitent, do nothing
+     // logMsg_("(time - lastDataTime) == 1", logutils::LogLevel::Debug);
+  }
+  else
+  {  // Else TimeEnty time indices are inconsitent, check conditions and repair
+    logMsg_("Inconsistent times!!", logutils::LogLevel::Debug);
+    if ((data.header.seq_num - lastData.header.seq_num) == 1)
+    {  // If seq_num's are consecutive
+      logMsg_("(data.header.seq_num - lastData.header.seq_num) == 1",
+              logutils::LogLevel::Debug);
+      if (std::abs(data.header.timestampArrival.nanoseconds - 0.5e9) < 0.25e9)
+      {  // If I'm in the window around 0.5 where rounding direction switches
+         // occur
+        logMsg_("std::abs(data.header.timestampArrival.nanoseconds - 5e9) < 25",
+                logutils::LogLevel::Debug);
+        double lastTimestampArrival =
+          ((double)lastData.header.timestampArrival.sec +
+           ((double)(lastData.header.timestampArrival.nanoseconds)) / 1e9);
+        double timestampArrival =
+          (double)data.header.timestampArrival.sec +
+          ((double)(data.header.timestampArrival.nanoseconds)) / 1e9;
+        double actualDt = timestampArrival - lastTimestampArrival;
+
+        if ((actualDt < 1.5) & (actualDt > 0.5))
+        {  // If actual Dt is approximately 1
+
+          if ((time - lastDataTime) == 0)  // Adjust time up 1
+          {
+            newTime++;
+            msg << " , time+1 = " << newTime;
+            logMsg_("Increase time 1", logutils::LogLevel::Debug);
+          }
+          else if ((time - lastDataTime) == 2)  // Adjust time down 1
+          {
+            newTime--;
+            msg << " , time-1 = " << newTime;
+            logMsg_("Decrease time 1", logutils::LogLevel::Debug);
+          }
+        }
+      }
+    }
+  }
+
+  // add the provided observable to the repos as either a local or remote
+  // determined by the provided flag
+  if (localFlag)
+  {
+    msg << " (local)";
+  }
+  else
+  {
+    msg << " (remote)";
+  }
+  // logMsg_(msg.str(), logutils::LogLevel::Debug);
+  return newTime;
+}
 
 //==================================================================
 //---------------------------addDataToRepo--------------------------
@@ -273,24 +420,16 @@ void IntegrityMonitor::addDataToRepo(const double&      time,
                                      const bool&        localFlag,
                                      const std::string& deviceId)
 {
-  std::stringstream msg;
-  msg << std::setprecision(10);
-  msg << "enter data at time: " << time;
-
   // add the provided observable to the repos as either a local or remote
   // determined by the provided flag
   if (localFlag)
   {
-    msg << " (local)";
     IntegrityDataRepository::getInstance().addEntry(time, data);
   }
   else
   {
-    msg << " (remote)";
     IntegrityDataRepository::getInstance().addEntry(time, deviceId, data);
   }
-  // std::lock_guard<std::mutex> lock(monitorMutex_);
-  logMsg_(msg.str(), logutils::LogLevel::Debug);
 }
 
 //==================================================================

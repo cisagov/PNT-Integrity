@@ -1,20 +1,16 @@
 
-project(integrity_toolkit CXX C)
 cmake_minimum_required(VERSION 3.5)
+project(integrity_toolkit LANGUAGES CXX C VERSION 3.2.1)
 
-set (INTEGRITY_TOOLKIT_MAJOR_VERSION 3)
-set (INTEGRITY_TOOLKIT_MINOR_VERSION 0)
-set (INTEGRITY_TOOLKIT_PATCH_VERSION 0)
-
-set (PROJECT_VERSION ${INTEGRITY_TOOLKIT_MAJOR_VERSION}.${INTEGRITY_TOOLKIT_MINOR_VERSION}.${INTEGRITY_TOOLKIT_PATCH_VERSION})
 message (STATUS "${PROJECT_NAME} version ${PROJECT_VERSION}")
 
 option(BUILD_KIT "Build kit?" false)
+option(BUILD_TESTS "Build tests?" false)
 
 set(as_subproject logutils if_utils pnt_integrity )
 if(BUILD_KIT)
   set(as_subproject logutils if_utils pnt_integrity integrity_ui_base serial 
-  ublox yaml_parser usrp_utilities)
+  ublox yaml_parser usrp_utilities cf_display)
 endif(BUILD_KIT)
 
 # Allow dependencies to be found when added using add_subdirectory
@@ -30,12 +26,17 @@ add_subdirectory(is4s_common/logutils)
 add_subdirectory(if_data_utils)
 add_subdirectory(pnt_integrity/pnt_integrity)
 
+if (BUILD_TESTS)
+  add_subdirectory(pnt_integrity/pnt_integrity_tests)
+endif (BUILD_TESTS)
+
 if(BUILD_KIT)
   add_subdirectory(integrity_ui/integrity_ui_base)
   add_subdirectory(is4s_common/yaml_parser)
   add_subdirectory(serial)
   add_subdirectory(ublox/ublox)
   add_subdirectory(usrp_utilities/usrp_utilities)
+  add_subdirectory(cf_display)
 
   ###############################################################################
   ## Configure compiler                                                        ##
@@ -63,7 +64,7 @@ if(BUILD_KIT)
   find_package(ublox REQUIRED)
   find_package(yaml_parser REQUIRED)
   find_package(usrp_utilities REQUIRED)
-
+  find_package(cf_display REQUIRED)
   ###############################################################################
   ## Build Application                                                         ##
   ###############################################################################
@@ -80,10 +81,14 @@ if(BUILD_KIT)
     include/integrity_toolkit/ToolkitApplication.hpp
     src/ToolkitApplication.cpp
     src/toolkitMainApplication.cpp
+    include/integrity_toolkit/ToolkitLCDDisplay.hpp
+    src/ToolkitLCDDisplay.cpp
+    include/integrity_toolkit/CsvWrite.hpp
+    src/CsvWrite.cpp
   )
 
   target_link_libraries(${PROJECT_NAME} PRIVATE integrity_ui_base pnt_integrity ublox 
-    usrp_utilities yaml_parser Qt5::Widgets Qt5::Charts Qt5::WebEngineWidgets)
+    usrp_utilities yaml_parser cf_display Qt5::Widgets Qt5::Charts Qt5::WebEngineWidgets)
 
   if(PNT_INTEGRITY_INCLUDES_ACQ_CHECK)
     target_compile_definitions(${PROJECT_NAME} PRIVATE PNT_INTEGRITY_INCLUDES_ACQ_CHECK)
@@ -91,4 +96,5 @@ if(BUILD_KIT)
 
   install(TARGETS ${PROJECT_NAME} DESTINATION bin)
   install(FILES config/toolkitAppConfig.yaml DESTINATION bin)
+
 endif(BUILD_KIT)

@@ -411,7 +411,7 @@ struct AssuranceReports
 };
 
 //==============================================================================
-/// \brief A structure for pseudorange observables
+/// \brief A structure for GNSS observables (pseudorange, carrier, doppler, etc)
 struct GNSSObservable
 {
   /// Satellite ID or PRN
@@ -567,6 +567,26 @@ struct GNSSObservables
                   const GNSSTime&         gnssTime,
                   const GNSSObservableMap obsMap)
     : header(header), gnssTime(gnssTime), observables(obsMap){};
+};
+
+//==============================================================================
+/// \brief GNSS Subframe data
+///
+/// This data structure represents a complete subframe of broadcast navigation
+/// data decoded from a single signal.
+struct GNSSSubframe
+{
+  /// The message header
+  Header header;
+
+  /// Satellite ID or PRN
+  uint16_t prn;
+
+  /// The satellite system that the observable originates
+  SatelliteSystem satelliteType;
+
+  /// Broadcast navigation data subframe bytes
+  std::vector<uint8_t> subframeData;
 };
 
 //============================================================================
@@ -795,6 +815,24 @@ struct MeasuredRange
 };
 
 //==============================================================================
+/// \brief A structure that represents an RF spectrum measurement
+struct RfSpectrum
+{
+  /// The message header
+  Header header;
+
+  /// Spectrum span [Hz]
+  int span;
+
+  /// Center of spectrum span [Hz]
+  int center_frequency;
+
+  /// Vector of spectrum measurments [dB]
+  /// TODO: add comment that defines frequency for each bin
+  std::vector<double> spectrum;
+};
+
+//==============================================================================
 /// \brief A structure to represent an AGC measurement
 struct AgcValue
 {
@@ -803,105 +841,6 @@ struct AgcValue
 
   /// A vector for AGC values (multiple bands possible)
   std::map<FrequencyBand, double> agcValues;
-};
-
-//==============================================================================
-/// \brief An enumeration for diagnostic level
-enum class LevelEnum
-{
-  DIAG_OK = 0,
-  DIAG_WARN,
-  DIAG_ERROR,
-  DIAG_STALE
-};
-
-/// \brief A structure for key value pairs
-struct KeyValue
-{
-  /// Label for the value
-  std::string key;
-
-  /// Value
-  std::string value;
-};
-
-//==============================================================================
-
-/// \brief A structure for general diagnostic messages
-struct Diagnostics
-{
-  /// The message header
-  data::Header header;
-
-  /// Enumeration field to indicate operating level of source application or
-  /// component
-  data::LevelEnum level;
-
-  /// The name of the diagnostic
-  std::string name;
-
-  /// Detailed description of message
-  std::string message;
-
-  /// An identifier for the source of the diagnostic (i.e. hardware serial
-  /// number or name of the generating application)
-  std::string hardwareId;
-
-  /// The number of key/value pairs in the diagnostic message
-  long numValues;
-
-  /// A vector of id / value pairs
-  std::vector<data::KeyValue> values;
-};
-//==============================================================================
-/// \brief An enumeration for event log type
-enum class EventLogType
-{
-  NotSet = 0,
-  Debug,
-  Info,
-  Warning,
-  Error,
-  Critical
-};
-
-/// \brief Structure for event log messages
-struct EventLog
-{
-  /// The message header
-  data::Header header;
-
-  /// The type of event log
-  data::EventLogType eventLogType;
-
-  /// The log message
-  std::string eventLog;
-};
-//==============================================================================
-/// \brief The command / response type enumeration
-enum class CommandResponseType
-{
-  COMMAND = 0,
-  RESPONSE
-};
-
-/// \brief A structure for command / response messages
-struct CommandResponse
-{
-  /// The header associated with the command / response structure
-  data::Header header;
-
-  /// The device id of the command target (only used for responses)
-  long deviceId;
-
-  /// The identifier for the command
-  long commandId;
-
-  /// Tye type of message
-  data::CommandResponseType type;
-
-  /// The command or response message
-  std::string message;
 };
 
 }  // namespace data

@@ -19,9 +19,7 @@ The initial release of this Library has the following built-in assurance / integ
 	* Automatic Gain Control (AGC) monitoring
 * Model-based Consistency Checks
 	* PNT discontinuities (time / position jumps)
-	* Carrier-to-noise (CNo) consistency checks
-	* Code - Carrier divergence checks
-	* Navigation data monitoring
+	* Consistency checks (Carrier-to-noise, position/velocity)
   
 ## System Components
 Each of the following sections describe each component of the framework in more detail.
@@ -77,7 +75,7 @@ The "AssuranceCheck" module is a virtual object within the framework, meaning th
 The Assurance Check base class contains all data and functions that are common to every assurance check child derivative class. As an example, the parent class contains a setting known as the assurance level period. This setting defines how long each check must hold a lowered assurance level before it can be raised again. If a child check detects that the level should be lowered to indicate an attack, this level change is allowed immediately. However, if the child check decides that the attack condition is no longer present, the check must hold previously lowered value for this pre-determined amount of time. This single-sided hysteresis is intended to prevent level "flickering."
 
 ### Integrity Monitor
-The "IntegrityMonitor" module is the primary component that the user application will interface with. All assurance checks, both user-defined and built-in, must be registered with the integrity montior, which will keep a vector of all registered checks. The enclosing application will then pass all received data messages to the integrity monitor for processing as they are received. The monitor will cycle through all registered checks, calling the appropriate data processing function in each check. After all checks have been called, the monitor will then extract the calculated assurance level from each check and blend them for an overall result.
+The "IntegrityMonitor" module is the primary component that the user application will interface with. All assurance checks, both user-defined and built-in, must be registered with the integrity monitor, which will keep a vector of all registered checks. The enclosing application will then pass all received data messages to the integrity monitor for processing as they are received. The monitor will cycle through all registered checks, calling the appropriate data processing function in each check. After all checks have been called, the monitor will then extract the calculated assurance level from each check and blend them for an overall result.
 
 ### Integrity Data Repository
 A time history of received integrity data is available for use by the built-in and user-defined assurance checks. The repository has a time-history length that can be controlled with a setting. Repository use is not required for user-defined checks, but it is accessible if desired. See the attached documentation on how to utilize the repository.
@@ -132,9 +130,9 @@ If the distance between two antennas is known (or measured), a simple but effect
 ## Signal Power and Vestigial Peak Detection Algorithms
 
 ### Acquisition Check
-Often a jammer will be used in conjunction with a spoofer in order to raise the noise floor and hide the authentic signal.  Other times the spoofer will transmit at much higher power levels than the live-sky signal in order to cover a large area or due to miscalibration (a very difficult process). One straightforward way of detecting spoofers is by closely monitoring the power levels of the signals in the acquisition process. Despite the fact that the GPS signal transmission was designed to provide roughly constant power from horizon to horizon, there are still power level differences of three to six decibels from horizon to zenith. By knowing the possible power change across the satellites path, the amount of amplification coming from the antenna, amplification from low noise amplifiers, and using previously known correlation values, a range of possible correlation values can be determined and set as a threshold. Should any correlation value be higher than the threshold, it is likely from an attack and can be quickly detected.  
+Often a jammer will be used in conjunction with a spoofer in order to raise the noise floor and hide the authentic signal.  Other times the spoofer will transmit at much higher power levels than the live-sky signal in order to cover a large area or due to mis-calibration (a very difficult process). One straightforward way of detecting spoofers is by closely monitoring the power levels of the signals in the acquisition process. Despite the fact that the GPS signal transmission was designed to provide roughly constant power from horizon to horizon, there are still power level differences of three to six decibels from horizon to zenith. By knowing the possible power change across the satellites path, the amount of amplification coming from the antenna, amplification from low noise amplifiers, and using previously known correlation values, a range of possible correlation values can be determined and set as a threshold. Should any correlation value be higher than the threshold, it is likely from an attack and can be quickly detected.  
 
-The acquisition check currently implemented in this library takes IF data snippets from a receiver front end, runs a signal acquisition process, and then monitors the correlator outputs for suspect power levels . Each tracking channel (up to 32 for GPS L1) is assessed independently and then aggregated to form a composite assurance level for the check. For each channel, the highest two peaks in the signal correlation plane are selected. If the highest peak is above a threshold, then this channel is considered to be suspect. If PRN is considered to be acquired in this high-power state (i.e. when the ratio of peak1 to peak 2 is above the threshold), then it is flagged as "unassured" to indicate a possible attack. If it is not acquired in this high-power state, then it is flagged as "inconsistent" to indicate possible jamming. If the peak 1 value is below the high-power threshold, but still aove the acquisition threshold, then that PRN is considered to be acquired in safe state and is acquired as "assured". Otherwise, the PRN is flagged as "unavailable" (i.e. the satellite is not in view). The number of PRNs in each state are summed and passed through the following logic to determine the assurance level for any given time.
+The acquisition check currently implemented in this library takes IF data snippets from a receiver front end, runs a signal acquisition process, and then monitors the correlator outputs for suspect power levels . Each tracking channel (up to 32 for GPS L1) is assessed independently and then aggregated to form a composite assurance level for the check. For each channel, the highest two peaks in the signal correlation plane are selected. If the highest peak is above a threshold, then this channel is considered to be suspect. If PRN is considered to be acquired in this high-power state (i.e. when the ratio of peak1 to peak 2 is above the threshold), then it is flagged as "unassured" to indicate a possible attack. If it is not acquired in this high-power state, then it is flagged as "inconsistent" to indicate possible jamming. If the peak 1 value is below the high-power threshold, but still above the acquisition threshold, then that PRN is considered to be acquired in safe state and is acquired as "assured". Otherwise, the PRN is flagged as "unavailable" (i.e. the satellite is not in view). The number of PRNs in each state are summed and passed through the following logic to determine the assurance level for any given time.
 
 	if (unassuredCount >= assuranceUnassuredThresh_)
     {
@@ -176,11 +174,41 @@ The position jump check is an advanced extension of the static-position check. T
 Another model-based check is available by comparing the consistency between the position and velocity measurements out of a receiver. A pseudo-velocity measurement can be created by differencing the position measurements over time. If these measurements are not in agreement with the velocity measurement (within a threshold / bound), then the assurance level is lowered.
 
 ### Clock-Jump Check
-Another model-based check examines the clock bias and drift for normal behavior. The Clock Bias Check calculates the expectation and variance of the clock drift for the most recent set of clock samples, minus the most recent sample. The expectation is used to propagate the clock forward to themost recent single sample's arrival time and check if it is within reasonable bounds. The variance is used to check for zero-bias disruption.
+Another model-based check examines the clock bias and drift for normal behavior. The Clock Bias Check calculates the expectation and variance of the clock drift for the most recent set of clock samples, minus the most recent sample. The expectation is used to propagate the clock forward to the most recent single sample's arrival time and check if it is within reasonable bounds. The variance is used to check for zero-bias disruption.
 
 ### Carrier-to-noise (CNo) Consistency Check
-This check is often effective in detecting a code-generating spoofing attack.  In live sky signals, observed C/No values have significant variation due to differences in SV elevation, signal obstructions, multipath, etc.  During simulator-based spoofing attack, all spoofed signals may be transmitted at the same C/No level.  This check detects this artifact by monitoring the distribution of observed signal C/No's.
+This check is often effective in detecting a code-generating spoofing attack.  In live sky signals, observed C/No values have significant variation due to differences in SV elevation, signal obstructions, multi-path, etc.  During simulator-based spoofing attack, all spoofed signals may be transmitted at the same C/No level.  This check detects this artifact by monitoring the distribution of observed signal C/No's.
 
 ![rp_check](./doc/images/cno.png)
 @image latex doc/images/cno.png
+
+## Navigation Data Monitoring
+The PNT Integrity Library includes monitoring of navigation data output available from a GPS receiver. Many COTS receivers typically output raw subframe data received from each satellite vehicle. The library has the ability to monitor these subframes for malformed data. By default, the library uses constraints codified in a whitelist defined by the IS-GPS-200H specification. Source code can be modified to adjust these constraints to end-users' desires.
+
+The diagram below shows the navigation data monitoring process as implemented in the PNT Integrity Library. The Navigation data check is structured like the other checks in the library, with common inheritance from the base AssuranceCheck class and handlers for all observables. The Nav-Data Check only responds to GNSS subframe messages. Subframes should arrive the in the receive on 6 second intervals. The subframe handler function in the nav-data check extracts the subframe ID from the received raw data and parses accordingly. An ephemeris (or almanac object) is populated as subframes arrive. Each parsing call checks the data for validity bounds. When valid data is received, it is pass along to "stateful" checks that check consistency of certain parameters over time. Validity outputs from both the bounds checks and the stateful checks are available for downstream applications.
+
+
+![nav_data_check](./doc/images/nav_data_check.png)
+@image latex doc/images/nav_data_check.png
+
+The check also produces a combined assurance level based on the combined output of the bounds validity checks and the stateful checks. In the "out-of-the-box" configuration, the Integrity Monitor object simply logical OR's all other validity flags together. A logic high results in assurance level elevation to the WARNING state.
+
+Two stateful checks are currently implemented in the library. A time of week consistency check and a week number consistency check are described in the following sections.
+
+
+### Time of Week Stateful Check
+The time of week stateful check is responsible for verifying the proper behavior of the GPS time of week parameter. The time of week parameter from GPS subframes is an integer that increments by the amount of time between the arrival between each subframe (6 seconds), starting at 0 and advancing through the week to a value of 604794, then rolls over to 0 on the start of a new GPS week. The check must take into account that a receiver may eventually miss a subframe, meaning that the check cannot simply check for an increase of 6 for each subframe.
+
+The check accomplishes by calculating an offset between the week number and the local system time (PC clock). This offset should change very little over the course of time. A newly computed offset is compared to the last offset calculated with valid data. If the difference is greater than a threshold, the time of week is considered to be invalid.
+
+![tow_stateful](./doc/images/tow_stateful.png)
+@image latex doc/images/tow_stateful.png
+
+The implementation of this check assumes that the local system time will drift vary slowly over time. This is true particularly if the local system is synchronized to a stable reference source (NTP, PTP, GPS, etc).
+### Week Number Stateful Check
+The library also includes a stateful check of the GPS week number. When a new week number is received, the algorithm computes a delta between the new value and the last valid week number received. This delta is compared to an expected delta, which is computed based on the elapsed system time since the last valid time of week was received. If the deltas match, then the new week number is considered to be valid. The expected week number computation adjusts for potential week number rollover (WNRO). The week number check algorithm is shown in the figure below.
+
+
+![wn_stateful](./doc/images/wn_stateful.png)
+@image latex doc/images/wn_stateful.png
 

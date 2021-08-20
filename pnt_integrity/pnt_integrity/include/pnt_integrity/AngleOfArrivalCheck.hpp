@@ -56,25 +56,39 @@ const std::string INTEGRITY_AOA_DIAGNOSTICS = "INTEGRITY_AOA_DIAGNOSTICS";
 /// String ID for the AOA check diagnostic difference threshold
 const std::string INTEGRITY_AOA_DIAG_DIFF_THRESH =
   "INTEGRITY_AOA_DIAG_DIFF_THRESH";
-/// String ID for the AOA check diagnostic suspect prn count
-const std::string INTEGRITY_AOA_DIAG_SUSPECT_PRN_COUNT =
-  "INTEGRITY_AOA_DIAG_SUSPECT_PRN_COUNT";
+/// String ID for the AOA check diagnostic suspect prn percent
+const std::string INTEGRITY_AOA_DIAG_SUSPECT_PRN_PERCENT =
+  "INTEGRITY_AOA_DIAG_SUSPECT_PRN_PERCENT";
+/// String ID for the AOA check diagnostic unavailable prn percent
+const std::string INTEGRITY_AOA_DIAG_UNAVAILABLE_PRN_PERCENT =
+  "INTEGRITY_AOA_DIAG_UNAVAILABLE_PRN_PERCENT";
+/// String ID for the AOA check diagnostic assured prn percent
+const std::string INTEGRITY_AOA_DIAG_ASSURED_PRN_PERCENT =
+  "INTEGRITY_AOA_DIAG_ASSURED_PRN_PERCENT";
 /// String ID for the AOA check survey inconsistent thresh
 const std::string INTEGRITY_AOA_DIAG_ITHRESH = "INTEGRITY_AOA_DIAG_ITHRESH";
 /// String ID for the AOA check survey unassured thresh
 const std::string INTEGRITY_AOA_DIAG_UTHRESH = "INTEGRITY_AOA_DIAG_UTHRESH";
+/// String ID for the AOA check survey assured thresh
+const std::string INTEGRITY_AOA_DIAG_ATHRESH = "INTEGRITY_AOA_DIAG_ATHRESH";
 
 /// \brief Structure used to publish diagnostic data
 struct AoaCheckDiagnostics
 {
   /// The threshold that is used when comparing single differences
   double singleDiffThresh;
+  /// The number of PRNS that are unavailable (UNAVAILABLE)
+  double unavailablePrnPercent;
   /// The number of PRNS that appear suspect (UNASSURED or INCONSISTENT)
-  int suspectPrnCount;
+  double suspectPrnPercent;
+  /// The number of PRNS that are assured (ASSURED)
+  double assuredPrnPercent;
   /// The threshold used to check against the number of suspect PRNS
   double inconsistentThresh;
   /// The threshold used to check against the number of suspect PRNS
   double unassuredThresh;
+  /// The threshold used to check against the number of assured PRNS
+  double assuredThresh;
 };
 
 /// Enumeration to indicate what data field to use for the AOA check
@@ -124,6 +138,7 @@ public:
     : AssuranceCheck::AssuranceCheck(true, name, log)
     , aoaCheckData_(aoaCheckData)
     , singleDiffCompareThresh_(singleDiffCompareThresh)
+    , singleDiffCompareFailureLimit_(0.5)
     , prnCountThresh_(prnCountThresh)
     , rangeThreshold_(rangeThreshold)
     , lastDiagPublishTime_(0.0)
@@ -148,7 +163,8 @@ public:
   ///
   /// \param gnssObs The provided GNSS observable data
   /// \returns True if successful
-  bool handleGnssObservables(const data::GNSSObservables& gnssObs);
+  bool handleGnssObservables(const data::GNSSObservables& gnssObs,
+                             const double&                time = 0);
 
   /// \brief Triggers a manual check calculation
   ///
@@ -180,6 +196,16 @@ public:
     singleDiffCompareThresh_ = thresh;
   };
 
+  /// \brief Sets the Percent Failure Limit for the SingleDiffDiff Check
+  ///
+  /// Percentage Value expressed as [0 - 1]
+  ///
+  /// \param thresh The threshold value to use
+  void setDifferenceComparisonFailureLimit(const double& thresh)
+  {
+    singleDiffCompareFailureLimit_ = thresh;
+  };
+
   /// \brief Sets the prn count threshold
   ///
   /// This threshold is used to determine when to raise the assurance level
@@ -187,10 +213,10 @@ public:
   /// [threshold] other PRNS, then the AssuranceLevel is raised
   ///
   /// \param thresh The threshold value to use
-  void setPrnCountThreshold(const int& thresh) 
-  { 
+  void setPrnCountThreshold(const int& thresh)
+  {
     std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-    prnCountThresh_ = thresh; 
+    prnCountThresh_ = thresh;
   };
 
   /// \brief Sets the range threshold
@@ -201,10 +227,10 @@ public:
   /// difference is not calculated
   ///
   /// \param thresh The threshold to use
-  void setRangeThreshold(const double& thresh) 
-  { 
+  void setRangeThreshold(const double& thresh)
+  {
     std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-    rangeThreshold_ = thresh; 
+    rangeThreshold_ = thresh;
   };
 
   /// \brief Connects the internal publishing function to external interface
@@ -248,6 +274,8 @@ private:
   AoaCheckData aoaCheckData_;
 
   double singleDiffCompareThresh_;
+  double singleDiffCompareFailureLimit_;  // % failure of singleDiffDiff per PRN
+                                          // determining Assured/Unassured
   size_t prnCountThresh_;
 
   // When calculating differences between local and remote observables, if
@@ -267,6 +295,9 @@ private:
 
   double lastDiagPublishTime_;
   double lastDiffPublishTime_;
+
+  // TimeOfWeek of last received GNSSObservables
+  double curGnssObsTimeOfWeek_;
 
 };  // end AngleOfArrival class
 

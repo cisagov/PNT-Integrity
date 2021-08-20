@@ -99,7 +99,7 @@ public:
   void addEntry(const uint32_t&             satelliteID,
                 const data::GNSSObservable& gnssObs)
   {
-    gnssObsMap_[satelliteID] = gnssObs;
+    gnssObservables_.observables[satelliteID] = gnssObs;
   };
 
   /// \brief Returns a GNSS Observable
@@ -120,19 +120,43 @@ public:
   /// It overwrites the existing map entry with the provided one. Use the
   /// addEntry function for a single GNSSObservable to add to the existing map
   ///
-  /// \param gnssObsMap The provided GNSS observableMap
+  /// \param gnssObsMap The provided GNSSObs Map
   void addEntry(const data::GNSSObservableMap& gnssObsMap)
   {
-    gnssObsMap_ = gnssObsMap;
+    gnssObservables_.observables = gnssObsMap;
   };
 
-  /// \brief Returns a GNSS Observable
+  /// \brief Adds a provided GNSS observables as the data entry
+  ///
+  /// This function will place the provided GNSS observables as the entry.
+  /// It overwrites the existing entry with the provided one.
+  ///
+  /// \param gnssObservables The provided GNSSObservables
+  void addEntry(const data::GNSSObservables& gnssObservables)
+  {
+    gnssObservables_ = gnssObservables;
+  };
+
+  /// \brief Returns a GNSSObservables
+  ///
+  /// \param gnssObservables The returned GNSS observables
+  /// \returns True if the observable map exists
+  bool getData(data::GNSSObservables& gnssObservables) const
+  {
+    if (gnssObservables_.header.seq_num == 0)
+      return false;
+
+    gnssObservables = gnssObservables_;
+    return true;
+  };
+
+  /// \brief Returns a GNSS ObservableMap
   ///
   /// \param gnssObsMap The returned GNSS observable map
   /// \returns True if the observable map exists
   void getData(data::GNSSObservableMap& gnssObsMap) const
   {
-    gnssObsMap = gnssObsMap_;
+    gnssObsMap = gnssObservables_.observables;
   };
 
   //============================================================================
@@ -149,7 +173,14 @@ public:
   /// \brief Returns the RF range observable
   ///
   /// \param range The returned value
-  void getData(data::MeasuredRange& range) const { range = range_; };
+  bool getData(data::MeasuredRange& range) const
+  {
+    if (range_.header.seq_num == 0)
+      return false;
+
+    range = range_;
+    return true;
+  };
 
   //============================================================================
   //------------------ Position / velocity accessor functions ------------------
@@ -165,9 +196,13 @@ public:
   /// \brief Returns the position velocity data from the repo entry
   ///
   //// \param posVel The returned data structure
-  void getData(data::PositionVelocity& posVel) const
+  bool getData(data::PositionVelocity& posVel) const
   {
+    if (positionVelocity_.header.seq_num == 0)
+      return false;
+
     posVel = positionVelocity_;
+    return true;
   };
 
   //============================================================================
@@ -184,9 +219,13 @@ public:
   /// \brief Returns the clock offset data from the repo entry
   ///
   //// \param clockOffset The returned data structure
-  void getData(data::ClockOffset& clockOffset) const
+  bool getData(data::ClockOffset& clockOffset) const
   {
+    if (clockOffset_.header.seq_num == 0)
+      return false;
+
     clockOffset = clockOffset_;
+    return true;
   };
 
   //============================================================================
@@ -204,10 +243,10 @@ private:
   std::string    nodeId_;
   DataLocaleType dataLocaleType_;
 
-  data::GNSSObservableMap gnssObsMap_;
-  data::MeasuredRange     range_;
-  data::PositionVelocity  positionVelocity_;
-  data::ClockOffset       clockOffset_;
+  data::GNSSObservables  gnssObservables_;
+  data::MeasuredRange    range_;
+  data::PositionVelocity positionVelocity_;
+  data::ClockOffset      clockOffset_;
 
   logutils::LogCallback logMsg_;
 };

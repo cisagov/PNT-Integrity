@@ -105,7 +105,7 @@ public:
     , distanceTraveled_(0.0)
     , distanceTraveledReceived_(false)
     , positionJumpBound_(minimumBound_)
-    , currentEstPvSet_(false)
+    , currentEstPositionSet_(false)
   {
     if (useEstimatedPv && useDistTraveled)
     {
@@ -189,27 +189,27 @@ public:
   /// \brief Returns the calculated distance between the current position to the
   /// last good position
   /// \returns The calculated distance
-  double getCalculatedDistance() 
-  { 
+  double getCalculatedDistance()
+  {
     std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-    return distanceToLastGoodPos_; 
+    return distanceToLastGoodPos_;
   };
 
   /// \brief Returns the currently estimated distance traveled since the
   /// last known good position
   /// \returns The estimated distance traveled
-  double getDistanceTraveled() 
-  { 
+  double getDistanceTraveled()
+  {
     std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-    return distanceTraveled_; 
+    return distanceTraveled_;
   };
 
   /// \brief Returns the current bound that is used by the check
   /// \returns The current jump bound
-  double getBound() 
-  { 
+  double getBound()
+  {
     std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-    return positionJumpBound_; 
+    return positionJumpBound_;
   };
 
   /// \brief Connects the internal publishing function to external interface
@@ -226,8 +226,14 @@ public:
     publishDiagnostics_ = handler;
   };
 
+  void clearCurrentEstimatedPosition() {
+    currentEstPositionSet_ = false;
+  }
+
 private:
   geodetic_converter::GeodeticConverter geodeticConverter_;
+
+  data::PositionVelocity lastReceiverPv_;  // Last PV received
 
   double minimumBound_;     // Minimum position jump bound (m)
   bool   useEstimatedPv_;   // Flag to indicate use of estimated position and
@@ -250,8 +256,9 @@ private:
   // update the bound with time (when not using distance traveled)
   void updateBound(const double& updateTime);
 
-  data::GeodeticPosition3d currentEstimatedPv_;
-  bool                     currentEstPvSet_;
+  data::GeodeticPosition3d currentEstimatedPosition_;
+  double                   currentEstPosCovariance_[3][3];
+  bool                     currentEstPositionSet_;
 
   std::function<void(const double&                  timestamp,
                      const PosJumpCheckDiagnostics& diagnostics)>

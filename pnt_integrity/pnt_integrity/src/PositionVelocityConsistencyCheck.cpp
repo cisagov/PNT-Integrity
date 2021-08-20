@@ -49,7 +49,7 @@ namespace pnt_integrity
 const double PI = 3.14159265358979323846;
 
 //==============================================================================
-//------------------------------ handleGnssObservables -------------------------
+//---------------------------- handlePositionVelocity --------------------------
 //==============================================================================
 bool PositionVelocityConsistencyCheck::handlePositionVelocity(
   const data::PositionVelocity& /*posVel*/,
@@ -72,8 +72,8 @@ bool PositionVelocityConsistencyCheck::handlePositionVelocity(
 bool PositionVelocityConsistencyCheck::runCheck()
 {
   std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-  std::vector<TimeEntry> timeEntryVec;
-  TimeEntry              newestEntry;
+  std::vector<TimeEntry>                timeEntryVec;
+  TimeEntry                             newestEntry;
   IntegrityDataRepository::getInstance().getNewestEntry(newestEntry);
   double startTime = newestEntry.timeOfWeek_ - sampleWindow_;
   if (IntegrityDataRepository::getInstance().getNewestEntries(timeEntryVec,
@@ -204,7 +204,7 @@ data::GeodeticPosition3d PositionVelocityConsistencyCheck::propagatePosition(
   double                   dt)
 {
   std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-  
+
   double                   metersPerDegLat = 111111.0;
   double                   metersPerRadLat = metersPerDegLat * 180 / PI;
   double                   metersPerDegLon = metersPerDegLat * cos(p.latitude);

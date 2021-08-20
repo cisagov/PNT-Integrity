@@ -51,8 +51,27 @@ namespace pnt_integrity
 //------------------------------ handleGnssObservables -------------------------
 //==============================================================================
 bool AngleOfArrivalCheck::handleGnssObservables(
-  const data::GNSSObservables& /*gnssObs*/)
+  const data::GNSSObservables& gnssObs,
+  const double&                time)
 {
+  if (time != 0)
+  {
+    curGnssObsTimeOfWeek_ = time;
+  }
+  else
+  {
+    double fullSeconds = (double)gnssObs.header.timestampValid.sec;
+    double fracSeconds =
+      ((double)(gnssObs.header.timestampValid.nanoseconds)) / 1e9;
+    curGnssObsTimeOfWeek_ = std::round(fullSeconds + fracSeconds);
+  }
+
+  std::stringstream log_str;
+  log_str << "AngleOfArrivalCheck::" << __FUNCTION__
+          << "() : curGnssObsTimeOfWeek_ = " << (int)curGnssObsTimeOfWeek_
+          << " , gpsSec = " << gnssObs.gnssTime.secondsOfWeek;
+  logMsg_(log_str.str(), LogLevel::Debug);
+
   // data has already been added to the repo by the integrity monitor
   return runCheck();
 }
@@ -62,17 +81,23 @@ bool AngleOfArrivalCheck::handleGnssObservables(
 //==============================================================================
 bool AngleOfArrivalCheck::runCheck()
 {
-  std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
-  // pull the newest entry from the repo
-  TimeEntry newestEntry;
-  if (IntegrityDataRepository::getInstance().getNewestEntry(newestEntry))
+  // Run Check for time of last received GnssObservable (curGnssObsTimeOfWeek_)
+  TimeEntry currentEntry;
+  if (IntegrityDataRepository::getInstance().getEntry(curGnssObsTimeOfWeek_,
+                                                      currentEntry))
   {
-    checkAngleOfArrival(
-      newestEntry.timeOfWeek_, newestEntry.localData_, newestEntry.remoteData_);
+    checkAngleOfArrival(currentEntry.timeOfWeek_,
+                        currentEntry.localData_,
+                        currentEntry.remoteData_);
     return true;
   }
   else
   {
+    std::stringstream log_str;
+    log_str << "AngleOfArrivalCheck::" << __FUNCTION__
+            << "() : No data at curGnssObsTimeOfWeek_ = "
+            << (int)curGnssObsTimeOfWeek_;
+    logMsg_(log_str.str(), LogLevel::Debug);
     return false;
   }
 }
@@ -88,7 +113,6 @@ void AngleOfArrivalCheck::checkAngleOfArrival(
   std::lock_guard<std::recursive_mutex> lock(assuranceCheckMutex_);
 
   std::stringstream log_str;
-  log_str << std::endl << std::endl;
   log_str << __FUNCTION__ << "() : checkTime = " << (int)checkTime;
   logMsg_(log_str.str(), LogLevel::Debug);
   log_str.str(std::string());
@@ -111,22 +135,36 @@ void AngleOfArrivalCheck::checkAngleOfArrival(
     logMsg_(log_str.str(), LogLevel::Debug);
     log_str.str(std::string());
     prnAssuranceLevels_.clear();
+    // changeAssuranceLevel(checkTime, data::AssuranceLevel::Unavailable);
+    // TODO: Should this also set assurance to Unavailable? - Chris Collins
   }
 
   // pull the local observable map
-  data::GNSSObservableMap localObsMap;
-  localEntry.getData(localObsMap);
+  data::GNSSObservables localObs;
+  if (!localEntry.getData(localObs))
+  {
+    log_str << __FUNCTION__ << "():  !localEntry.getData(localObs)";
+    logMsg_(log_str.str(), LogLevel::Debug);
+    log_str.str(std::string());
+    // changeAssuranceLevel(checkTime, data::AssuranceLevel::Unavailable);
+    return;
+  }
   // if there are no local observables set the level to unavailable and exit
-  if (localObsMap.size() < prnCountThresh_)
+  if (localObs.observables.size() < prnCountThresh_)
   {
     log_str << __FUNCTION__
             << "():  localObsMap.size() < prnCountThresh_ -> "
                "AssuranceLevel::Unavailable";
     logMsg_(log_str.str(), LogLevel::Debug);
     log_str.str(std::string());
-    changeAssuranceLevel(checkTime, data::AssuranceLevel::Unavailable);
+    // changeAssuranceLevel(checkTime, data::AssuranceLevel::Unavailable);
     return;
   }
+
+  log_str << __FUNCTION__
+          << "():  localObsGpsSec = " << localObs.gnssTime.secondsOfWeek;
+  logMsg_(log_str.str(), LogLevel::Debug);
+  log_str.str(std::string());
 
   // perform the check with each remote node
   RemoteRepoEntries::const_iterator remoteIt = remoteEntries.begin();
@@ -134,6 +172,19 @@ void AngleOfArrivalCheck::checkAngleOfArrival(
   // create the map that holds the calculated assurance for each prn that
   // results from AOA calc from each node
   PrnAssuranceEachNode prnAssuranceEachNode;
+
+  log_str << "Local entries NodeID = " << localObs.header.deviceId;
+  logMsg_(log_str.str(), LogLevel::Debug);
+  log_str.str(std::string());
+
+  // If there aren't any remoteEntries, return
+  if (remoteIt == remoteEntries.end())
+  {
+    log_str << __FUNCTION__ << "No Remote entries.";
+    logMsg_(log_str.str(), LogLevel::Debug);
+    log_str.str(std::string());
+    return;
+  }
 
   // for each remote node
   for (; remoteIt != remoteEntries.end(); ++remoteIt)
@@ -143,15 +194,24 @@ void AngleOfArrivalCheck::checkAngleOfArrival(
     log_str.str(std::string());
 
     // pull the remote observable map
-    data::GNSSObservableMap remoteObsMap;
-    remoteIt->second.getData(remoteObsMap);
+    data::GNSSObservables remoteObs;
+    remoteIt->second.getData(remoteObs);
 
-    if (remoteObsMap.size() < 1)
+    if (remoteObs.observables.size() < 1)
     {
       log_str << __FUNCTION__ << "():  remoteObsMap.size() < 1";
       logMsg_(log_str.str(), LogLevel::Debug);
       log_str.str(std::string());
       // changeAssuranceLevel(checkTime, data::AssuranceLevel::Unavailable);
+
+      // If there isn't another remote entry, return
+      if (std::next(remoteIt) == remoteEntries.end())
+      {
+        log_str << __FUNCTION__ << "(): (remoteIt+1) == remoteEntries.end()";
+        logMsg_(log_str.str(), LogLevel::Debug);
+        log_str.str(std::string());
+        return;
+      }
       continue;
     }
 
@@ -159,19 +219,50 @@ void AngleOfArrivalCheck::checkAngleOfArrival(
     data::MeasuredRange range;
     remoteIt->second.getData(range);
 
+    log_str << "Remote remoteObs.header.deviceId = "
+            << remoteObs.header.deviceId;
+    logMsg_(log_str.str(), LogLevel::Debug);
+    log_str.str(std::string());
+
+    // Make sure remote entry device ID doesn't match local entry device ID
+    if (remoteObs.header.deviceId.compare(localObs.header.deviceId) == 0)
+    {
+      std::stringstream logStr;
+      logStr << "AngleOfArrivalCheck::" << __FUNCTION__
+             << ": data skipped from device_id " << remoteObs.header.deviceId;
+      logMsg_(logStr.str(), logutils::LogLevel::Debug);
+
+      // If there isn't another remote entry, return
+      if (std::next(remoteIt) == remoteEntries.end())
+      {
+        log_str << __FUNCTION__ << "(): (remoteIt+1) == remoteEntries.end()";
+        logMsg_(log_str.str(), LogLevel::Debug);
+        log_str.str(std::string());
+        return;
+      }
+
+      continue;
+    }
+
     // a map to store the single differences
     SingleDiffMap singleDiffMap;
 
     // then look for a match for each local PRN to compute
-    data::GNSSObservableMap::const_iterator localMapIt = localObsMap.begin();
-    for (; localMapIt != localObsMap.end(); ++localMapIt)
+    data::GNSSObservableMap::const_iterator localMapIt =
+      localObs.observables.begin();
+    for (; localMapIt != localObs.observables.end(); ++localMapIt)
     {
       log_str << "Local Obs for loop.";
       logMsg_(log_str.str(), LogLevel::Debug);
       log_str.str(std::string());
-      // initialize the local assurance level to the received value
-      prnAssuranceEachNode[localMapIt->first].push_back(
-        localMapIt->second.assurance);
+
+      if (localMapIt->second.pseudorangeValid)
+      {
+        // Only initialize the local assurance level to the received value if it
+        // has valid data
+        prnAssuranceEachNode[localMapIt->first].push_back(
+          localMapIt->second.assurance);
+      }
 
       // If the range measurement is not valid, proceed with the check.
       // If it is valid, then make sure it is above the threshold before
@@ -183,7 +274,7 @@ void AngleOfArrivalCheck::checkAngleOfArrival(
           ((range.range >= rangeThreshold_) && (range.rangeValid)))
       {
         // find the remote prn that matches this prn
-        auto remoteMatchIt = remoteObsMap.find(localMapIt->first);
+        auto remoteMatchIt = remoteObs.observables.find(localMapIt->first);
 
         // determine what data field will be used for the difference
         // and calculate accordingly
@@ -192,7 +283,7 @@ void AngleOfArrivalCheck::checkAngleOfArrival(
           case AoaCheckData::UsePseudorange:
           {
             // if a match was found and both pseudoranges are valid
-            if (remoteMatchIt != remoteObsMap.end() &&
+            if (remoteMatchIt != remoteObs.observables.end() &&
                 localMapIt->second.pseudorangeValid &&
                 remoteMatchIt->second.pseudorangeValid)
             {
@@ -201,10 +292,10 @@ void AngleOfArrivalCheck::checkAngleOfArrival(
                 localMapIt->second.pseudorange -
                 remoteMatchIt->second.pseudorange;
 
-              // log_str << "Single Diff = " <<
-              // (double)singleDiffMap[localMapIt->first];
-              // logMsg_(log_str.str(), LogLevel::Info);
-              // log_str.str(std::string());
+              log_str << "Single Diff = "
+                      << (double)singleDiffMap[localMapIt->first];
+              logMsg_(log_str.str(), LogLevel::Debug);
+              log_str.str(std::string());
             }
             break;
           }  // end UsePseudorange case
@@ -227,7 +318,7 @@ void AngleOfArrivalCheck::checkAngleOfArrival(
 
         }  // end switch
       }
-    }                             // end remote  node for loop match search
+    }                              // end remote  node for loop match search
     if ((publishSingleDiffData_))  //&& (checkTime != lastDiffPublishTime_)
     {
       log_str << __FUNCTION__
@@ -262,7 +353,8 @@ void AngleOfArrivalCheck::nestedForLoopComparison(
   for (; sdIt != diffMap.end(); ++sdIt)
   {
     // initialize the count that determines the assurance level
-    size_t count = 0;
+    size_t failCount  = 0;
+    size_t totalCount = 0;
 
     // iterate through all other difference values, starting at the end
     // (could start at the beginning as well)
@@ -275,19 +367,37 @@ void AngleOfArrivalCheck::nestedForLoopComparison(
         // if the difference between single differences is within a threshold
         // flag this comparison PRN
         double singleDiffDiff = std::fabs(sdIt->second - compareIt->second);
+
         if (singleDiffDiff < singleDiffCompareThresh_)
         {
           // count this as a single difference that appears suspect when
           // compared to the PRN we are examining
-          count++;
+          failCount++;
         }
+        // count total DiffDiffs performed
+        totalCount++;
       }  // end if (compare different PRNs)
     }    // end compareIt for loop
 
-    if (count >= (prnCountThresh_ - 1))
+    double failPercent = (double)failCount / (double)totalCount;
+
+    std::stringstream log_str;
+    log_str << "Single Diff Diff : PRN [" << (int)sdIt->first
+            << "] : totalCount=" << totalCount
+            << " , failPercent=" << failPercent * 100 << "%";
+    logMsg_(log_str.str(), LogLevel::Debug);
+    log_str.str(std::string());
+
+    if (totalCount <
+        (prnCountThresh_ - 1))  // minimumTotalCount = (prnCountThresh_ - 1)
+    {  // Check isn't valid if not enough data available
+      prnAssuranceEachNode[sdIt->first].push_back(
+        data::AssuranceLevel::Unavailable);
+    }
+    else if (failPercent > singleDiffCompareFailureLimit_)
     {
       // if there are at least a certain number of PRNs that appear suspect
-      // then flag the base prn as not assured
+      // then flag the base prn as Unassured
       prnAssuranceEachNode[sdIt->first].push_back(
         data::AssuranceLevel::Unassured);
     }
@@ -312,6 +422,7 @@ void AngleOfArrivalCheck::setPrnAssuranceLevels(
   for (auto it = prnAssuranceEachNode.begin(); it != prnAssuranceEachNode.end();
        ++it)
   {
+    // TODO: Do something smarter here than just take the "highest" value
     auto maxIterator = std::max_element(it->second.begin(), it->second.end());
     prnAssuranceLevels_[it->first] = *maxIterator;
   }
@@ -326,9 +437,10 @@ void AngleOfArrivalCheck::calculateAssuranceLevel(const double& checkTime)
 
   // go throuh the prn assurance map and determine how many have been flagged
   // to set the overall level
-  int assuredCount     = 0;
-  int unavailableCount = 0;
-  int suspectCount     = 0;
+  size_t totalCount       = 0;
+  size_t assuredCount     = 0;
+  size_t unavailableCount = 0;
+  size_t suspectCount     = 0;
   for (auto it = prnAssuranceLevels_.begin(); it != prnAssuranceLevels_.end();
        ++it)
   {
@@ -344,24 +456,33 @@ void AngleOfArrivalCheck::calculateAssuranceLevel(const double& checkTime)
     {
       suspectCount++;
     }
-
+    totalCount++;
   }  // end for loop
+
+  double assuredPercent     = (double)assuredCount / (double)totalCount;
+  double unavailablePercent = (double)unavailableCount / (double)totalCount;
+  double suspectPercent     = (double)suspectCount / (double)totalCount;
+
+  if (totalCount < (prnCountThresh_ - 1))
+  {
+    changeAssuranceLevel(checkTime, data::AssuranceLevel::Unavailable);
+  }
 
   // if the number of "bad" PRNS are above the unusable thresh, set the
   // check level to unusable
-  if (suspectCount >= assuranceUnassuredThresh_)
+  else if (suspectPercent >= assuranceUnassuredThresh_)
   {
     changeAssuranceLevel(checkTime, data::AssuranceLevel::Unassured);
   }
-  // if the number of uspect PRNs are above the inconsistent thresh, set the
+  // if the number of supect PRNs are above the inconsistent thresh, set the
   // check level to inconsistent
-  else if (suspectCount >= assuranceInconsistentThresh_)
+  else if (suspectPercent >= assuranceInconsistentThresh_)
   {
     changeAssuranceLevel(checkTime, data::AssuranceLevel::Inconsistent);
   }
-  // else, if the number of assured PRNs makeup at least 1/2 of the total PRNS
-  // set the level to assured
-  else if (assuredCount > (double)(0.5 * prnAssuranceLevels_.size()))
+  // else, if the number of assured PRNs makeup enough of the total PRNS, set
+  // the check level to assured
+  else if (assuredPercent > assuranceAssuredThresh_)
   {
     changeAssuranceLevel(checkTime, data::AssuranceLevel::Assured);
   }
@@ -371,18 +492,25 @@ void AngleOfArrivalCheck::calculateAssuranceLevel(const double& checkTime)
   }
 
   std::stringstream msg;
-  msg << "AngleOfArrivalCheck::calculateAssuranceLevel() : Calculated level : "
-      << (int)getAssuranceLevel() << " , checked time: " << (int)checkTime;
+  msg << "AngleOfArrivalCheck::setAssuranceLevel() : Calculated level : "
+      << (int)getAssuranceLevel() << " , checked time: " << (int)checkTime
+      << " , suspectPercent=" << suspectPercent
+      << " , assuredPercent=" << assuredPercent
+      << " , totalCount=" << totalCount
+      << " , unavailablePercent=" << unavailablePercent;
   logMsg_(msg.str(), logutils::LogLevel::Debug);
 
   if ((publishDiagnostics_))  //&& (checkTime != lastDiagPublishTime_)
   {
     AoaCheckDiagnostics diagnostics;
 
-    diagnostics.singleDiffThresh   = singleDiffCompareThresh_;
-    diagnostics.suspectPrnCount    = suspectCount;
-    diagnostics.inconsistentThresh = assuranceInconsistentThresh_;
-    diagnostics.unassuredThresh    = assuranceUnassuredThresh_;
+    diagnostics.singleDiffThresh      = singleDiffCompareThresh_;
+    diagnostics.unavailablePrnPercent = unavailablePercent;
+    diagnostics.suspectPrnPercent     = suspectPercent;
+    diagnostics.assuredPrnPercent     = assuredPercent;
+    diagnostics.inconsistentThresh    = assuranceInconsistentThresh_;
+    diagnostics.unassuredThresh       = assuranceUnassuredThresh_;
+    diagnostics.assuredThresh         = assuranceAssuredThresh_;
 
     publishDiagnostics_(checkTime, diagnostics);
 

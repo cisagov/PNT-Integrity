@@ -40,7 +40,6 @@
 #include "if_data_utils/IFDataFileReader.hpp"
 #include "logutils/logutils.hpp"
 #include "pnt_integrity/AcquisitionCheck.hpp"
-#include "useFftw.h"
 
 #include <complex>
 #include <vector>
@@ -54,15 +53,8 @@ void        sig_int_handler(int)
   stop_signal_called = true;
 }
 
-int main(int argc, char** argv)
+int main(int /*argc*/, char** /*argv*/)
 {
-#if (USE_FFTW == 0)
-  printLogToStdOut(
-    "FFTW package not installed. Cannot use the AcquisitionCheck",
-    LogLevel::Error);
-
-  return 0;
-#endif
   // create the check instance
   pnt_integrity::AcquisitionCheck acqCheck;
 

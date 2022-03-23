@@ -130,6 +130,7 @@ IF(BUILD_PNT_INTEGRITY_EXAMPLES)
                         logutils
                         if_utils
                         ${PROJECT_NAME}
+                        pthread
   )
 
   target_compile_features(repo_test_app PRIVATE cxx_std_14)
@@ -137,7 +138,7 @@ IF(BUILD_PNT_INTEGRITY_EXAMPLES)
 
   if (BUILD_ACQUISTION_CHECK)
     add_executable(test_acquisition_check examples/testAcquisitionCheck.cpp)
-    target_link_libraries(test_acquisition_check ${PROJECT_NAME})
+    target_link_libraries(test_acquisition_check ${PROJECT_NAME} pthread)
 
     target_compile_features(test_acquisition_check PRIVATE cxx_std_14)
     target_compile_options(test_acquisition_check PRIVATE -Wall -Wextra -Wpedantic)

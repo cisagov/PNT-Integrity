@@ -60,7 +60,7 @@ void logHandler(const std::string& logMessage, const std::string& logLevel)
   std::cout << "[" << logLevel << "]" << logMessage << std::endl;
 }
 
-int main(int argc, char** argv)
+int main(int /*argc*/, char** /*argv*/)
 {
   // //===================Checks ObservableEntry=============
   // // Define an observable histroy entry for the local node
